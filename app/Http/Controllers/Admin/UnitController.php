@@ -34,7 +34,7 @@ class UnitController extends Controller
             'type' => ['required', 'in:Office,Retail,Medical'],
             'area' => ['required', 'integer', 'min:1'],
             'base_rent' => ['required', 'integer', 'min:0'],
-            'status' => ['nullable', 'in:occupied,vacant,expiring,overdue'],
+            'status' => ['nullable', 'in:occupied,vacant,reserved,expiring,overdue'],
             'tenant_id' => ['nullable', 'exists:tenants,id'],
         ]);
 
@@ -59,7 +59,7 @@ class UnitController extends Controller
             'type' => ['sometimes', 'in:Office,Retail,Medical'],
             'area' => ['sometimes', 'integer', 'min:1'],
             'base_rent' => ['sometimes', 'integer', 'min:0'],
-            'status' => ['sometimes', 'in:occupied,vacant,expiring,overdue'],
+            'status' => ['sometimes', 'in:occupied,vacant,reserved,expiring,overdue'],
             'tenant_id' => ['nullable', 'exists:tenants,id'],
         ]);
 

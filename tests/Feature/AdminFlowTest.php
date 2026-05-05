@@ -69,6 +69,16 @@ it('allows admin to open main admin pages', function () {
 it('runs full admin tenant crud', function () {
     $admin = makeAdmin();
 
+    Unit::create([
+        'number' => '102',
+        'floor' => '1F',
+        'type' => 'Retail',
+        'area' => 35,
+        'base_rent' => 8000,
+        'status' => 'vacant',
+        'tenant_id' => null,
+    ]);
+
     $this->actingAs($admin)
         ->post(route('admin.tenants.store'), [
             'name' => 'Tenant B',

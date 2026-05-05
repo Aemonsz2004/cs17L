@@ -31,10 +31,17 @@ class PaymentController extends Controller
 
     public function submit(Request $request): RedirectResponse
     {
+        $method = $request->input('method');
+
         $data = $request->validate([
             'invoice_id' => ['required', 'exists:invoices,id'],
             'method' => ['required', 'in:GCash,Bank Transfer,Cash'],
-            'reference' => ['nullable', 'string', 'max:120'],
+            'reference' => [
+                $method === 'Bank Transfer' ? 'required' : 'nullable',
+                'string',
+                'max:120',
+                'min:3',
+            ],
         ]);
 
         $invoice = Invoice::where('id', $data['invoice_id'])
@@ -44,7 +51,9 @@ class PaymentController extends Controller
 
         $invoice->update([
             'method' => $data['method'],
+            'reference' => $data['reference'] ?? null,
             'paid_date' => null,
+            'confirmed_at' => null,
         ]);
 
         TenantNotificationService::notifyPaymentSubmitted(

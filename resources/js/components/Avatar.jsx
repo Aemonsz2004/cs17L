@@ -1,0 +1,50 @@
+// src/components/ui/Avatar.jsx
+const sizeStyles = {
+    xs: 'w-6  h-6  text-[9px]',
+    sm: 'w-8  h-8  text-[11px]',
+    md: 'w-9  h-9  text-xs',
+    lg: 'w-11 h-11 text-sm',
+};
+// Deterministic color from name/initials
+const COLORS = [
+    'bg-[#1D7B6E]',
+    'bg-[#1B2B4B]',
+    'bg-[#C8963E]',
+    'bg-blue-500',
+    'bg-purple-500',
+    'bg-rose-500',
+    'bg-emerald-600',
+    'bg-indigo-500',
+];
+function pickColor(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return COLORS[Math.abs(hash) % COLORS.length];
+}
+export default function Avatar({
+    initials,
+    name = '',
+    size = 'sm',
+    online = false,
+    className = '',
+}) {
+    const color = pickColor(name || initials);
+    return (
+        <div className={['relative flex-shrink-0', className].join(' ')}>
+            <div
+                className={[
+                    sizeStyles[size],
+                    color,
+                    'flex items-center justify-center rounded-full font-bold text-white select-none',
+                ].join(' ')}
+            >
+                {initials.slice(0, 2).toUpperCase()}
+            </div>
+            {online && (
+                <span className="absolute right-0 bottom-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#24A18F]" />
+            )}
+        </div>
+    );
+}

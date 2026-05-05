@@ -30,6 +30,10 @@ class TenantMiddleware
             return redirect()->route('admin.dashboard');
         }
 
+        if ($request->user()->isApplicant()) {
+            return redirect()->route('applicant.dashboard');
+        }
+
         if (! $request->user()->isTenant()) {
             abort(403, 'Access denied.');
         }

@@ -5,8 +5,11 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\TenantOtpController;
 use App\Http\Controllers\Auth\TenantPasswordController;
+use App\Http\Controllers\Applicant\RegisterController as ApplicantRegisterController;
+use App\Http\Controllers\Applicant\ApplicationController as ApplicantApplicationController;
 
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\ApplicationReviewController;
 use App\Http\Controllers\Admin\TenantController;
 use App\Http\Controllers\Admin\UnitController;
 use App\Http\Controllers\Admin\BillingController;
@@ -23,32 +26,30 @@ use App\Http\Controllers\Tenant\PaymentController;
 use App\Http\Controllers\Tenant\MaintenanceController     as TenantMaintenanceController;
 use App\Http\Controllers\Tenant\MessageController;
 use App\Http\Controllers\Tenant\NotificationController    as TenantNotificationController;
+use App\Http\Controllers\Site\LeasingController;
+use App\Http\Controllers\Webhook\PayMongoWebhookController;
 
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
-Route::get('/', function () {
-    if (Auth::check()) {
-        $user = Auth::user();
+Route::get('/', [LeasingController::class, 'landing'])->name('landing');
 
-        if (! $user instanceof \App\Models\User) {
-            return redirect()->route('login');
-        }
+Route::get('/units', [LeasingController::class, 'units'])->name('units.index');
+Route::get('/units/{unit}', [LeasingController::class, 'show'])->name('units.show');
 
-        return $user->isAdmin()
-            ? redirect()->route('admin.dashboard')
-            : redirect()->route('tenant.home');
-    }
-    return redirect()->route('login');
-});
+Route::post('/webhooks/paymongo', PayMongoWebhookController::class)
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
+    ->name('webhooks.paymongo');
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 Route::middleware('guest')->group(function () {
     Route::get('/login',  [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store']);
+
+    Route::get('/apply/register', [ApplicantRegisterController::class, 'create'])->name('applicant.register');
+    Route::post('/apply/register', [ApplicantRegisterController::class, 'store'])->name('applicant.register.store');
 });
 
 Route::middleware('auth')->group(function () {
@@ -83,6 +84,7 @@ Route::middleware(['auth', 'admin'])
             Route::post('/',           [TenantController::class, 'store'])  ->name('store');
             Route::get('/{tenant}',    [TenantController::class, 'show'])   ->name('show');
             Route::patch('/{tenant}',  [TenantController::class, 'update']) ->name('update');
+            Route::post('/{tenant}/renew', [TenantController::class, 'renew'])->name('renew');
             Route::delete('/{tenant}', [TenantController::class, 'destroy'])->name('destroy');
         });
 
@@ -101,6 +103,7 @@ Route::middleware(['auth', 'admin'])
             Route::get('/{invoice}',                [BillingController::class, 'show'])       ->name('show');
             Route::patch('/{invoice}/mark-paid',    [BillingController::class, 'markPaid'])   ->name('mark-paid');
             Route::patch('/{invoice}/mark-overdue', [BillingController::class, 'markOverdue'])->name('mark-overdue');
+            Route::patch('/{invoice}/confirm-bank', [BillingController::class, 'confirmBankTransfer'])->name('confirm-bank');
         });
 
         // Maintenance
@@ -121,6 +124,16 @@ Route::middleware(['auth', 'admin'])
 
         // Reports
         Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+
+        // Rental applications
+        Route::prefix('applications')->name('applications.')->group(function () {
+            Route::get('/', [ApplicationReviewController::class, 'index'])->name('index');
+            Route::patch('/{application}/approve', [ApplicationReviewController::class, 'approve'])->name('approve');
+            Route::patch('/{application}/reject', [ApplicationReviewController::class, 'reject'])->name('reject');
+            Route::patch('/{application}/send-lease', [ApplicationReviewController::class, 'sendLease'])->name('send-lease');
+            Route::patch('/{application}/confirm-deposit', [ApplicationReviewController::class, 'confirmDeposit'])->name('confirm-deposit');
+            Route::post('/{application}/convert-tenant', [ApplicationReviewController::class, 'convertToTenant'])->name('convert-tenant');
+        });
 
         // Tenant messages
         Route::prefix('messages')->name('messages.')->group(function () {
@@ -168,4 +181,15 @@ Route::middleware(['auth', 'tenant'])
             Route::post('/read-all', [TenantNotificationController::class, 'markAllRead'])->name('read-all');
             Route::patch('/{notification}/read', [TenantNotificationController::class, 'markRead'])->name('read');
         });
+    });
+
+Route::middleware(['auth', 'applicant'])
+    ->prefix('apply')
+    ->name('applicant.')
+    ->group(function () {
+        Route::get('/dashboard', [ApplicantApplicationController::class, 'dashboard'])->name('dashboard');
+        Route::get('/form', [ApplicantApplicationController::class, 'create'])->name('form');
+        Route::post('/form', [ApplicantApplicationController::class, 'store'])->name('form.store');
+        Route::post('/{application}/acknowledge-lease', [ApplicantApplicationController::class, 'acknowledgeLease'])->name('acknowledge-lease');
+        Route::post('/{application}/submit-deposit', [ApplicantApplicationController::class, 'submitDeposit'])->name('submit-deposit');
     });

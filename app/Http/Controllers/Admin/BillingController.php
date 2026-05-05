@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\Lease;
 use App\Models\Tenant;
 use App\Support\TenantNotificationService;
 use Illuminate\Http\RedirectResponse;
@@ -49,6 +50,10 @@ class BillingController extends Controller
         $data['invoice_no'] = Invoice::nextInvoiceNo();
         $data['total'] = $data['rent'] + $data['utilities'] + $data['penalty'];
         $data['paid_date'] = $data['status'] === 'paid' ? now()->toDateString() : null;
+        $data['lease_id'] = Lease::where('tenant_id', $data['tenant_id'])
+            ->whereIn('status', ['active', 'expiring', 'overdue'])
+            ->latest('id')
+            ->value('id');
 
         Invoice::create($data);
 
@@ -72,5 +77,22 @@ class BillingController extends Controller
         $invoice->update(['status' => 'overdue']);
 
         return redirect()->route('admin.billing.index')->with('success', 'Invoice marked overdue.');
+    }
+
+    public function confirmBankTransfer(Invoice $invoice): RedirectResponse
+    {
+        abort_unless($invoice->method === 'Bank Transfer', 400);
+        abort_unless($invoice->status === 'due', 400);
+
+        $invoice->update([
+            'status' => 'paid',
+            'paid_date' => now()->toDateString(),
+            'confirmed_at' => now(),
+        ]);
+
+        TenantNotificationService::notifyPaymentConfirmed($invoice);
+
+        return redirect()->route('admin.billing.index')
+            ->with('success', sprintf('Bank Transfer confirmed for Invoice %s.', $invoice->invoice_no));
     }
 }

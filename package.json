@@ -10,7 +10,6 @@
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix",
         "lint:check": "eslint .",
-        "types:check": "tsc --noEmit",
         "test:e2e": "playwright test",
         "test:e2e:headed": "playwright test --headed"
     },

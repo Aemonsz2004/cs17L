@@ -55,6 +55,10 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('admin.dashboard'));
         }
 
+        if ($user->isApplicant()) {
+            return redirect()->intended(route('applicant.dashboard'));
+        }
+
         if ($user->must_change_password) {
             return redirect()
                 ->route('tenant.password.create')

@@ -25,10 +25,16 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\HandleInertiaRequests::class,
         ]);
 
+        // External payment providers (PayMongo) cannot send CSRF tokens.
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/paymongo',
+        ]);
+
         // Named middleware aliases used in routes/web.php
         $middleware->alias([
             'admin'  => \App\Http\Middleware\AdminMiddleware::class,
             'tenant' => \App\Http\Middleware\TenantMiddleware::class,
+            'applicant' => \App\Http\Middleware\ApplicantMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

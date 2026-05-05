@@ -5,7 +5,6 @@ import importPlugin from 'eslint-plugin-import';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
-import typescript from 'typescript-eslint';
 
 const controlStatements = [
     'if',
@@ -28,7 +27,6 @@ const paddingAroundControl = [
 export default [
     js.configs.recommended,
     reactHooks.configs.flat['recommended-latest'],
-    ...typescript.configs.recommended,
     {
         ...react.configs.flat.recommended,
         ...react.configs.flat['jsx-runtime'], // Required for React 17+
@@ -54,22 +52,10 @@ export default [
         },
         settings: {
             'import/resolver': {
-                typescript: {
-                    alwaysTryTypes: true,
-                    project: './tsconfig.json',
-                },
                 node: true,
             },
         },
         rules: {
-            '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/consistent-type-imports': [
-                'error',
-                {
-                    prefer: 'type-imports',
-                    fixStyle: 'separate-type-imports',
-                },
-            ],
             'import/order': [
                 'error',
                 {
@@ -86,10 +72,6 @@ export default [
                         caseInsensitive: true,
                     },
                 },
-            ],
-            'import/consistent-type-specifier-style': [
-                'error',
-                'prefer-top-level',
             ],
         },
     },
@@ -111,7 +93,7 @@ export default [
             'public',
             'bootstrap/ssr',
             'tailwind.config.js',
-            'vite.config.ts',
+            'vite.config.js',
             'resources/js/actions/**',
             'resources/js/components/ui/*',
             'resources/js/routes/**',
@@ -125,7 +107,11 @@ export default [
         },
         rules: {
             curly: ['error', 'all'],
-            '@stylistic/brace-style': ['error', '1tbs', { allowSingleLine: false }],
+            '@stylistic/brace-style': [
+                'error',
+                '1tbs',
+                { allowSingleLine: false },
+            ],
         },
     },
 ];

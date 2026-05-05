@@ -38,7 +38,7 @@ it('handles login logout and role based redirects', function () {
         'email_verified_at' => now(),
     ]);
 
-    $this->get('/')->assertRedirect(route('login'));
+    $this->get('/')->assertOk();
     $this->get(route('login'))->assertOk();
 
     $this->post('/login', [

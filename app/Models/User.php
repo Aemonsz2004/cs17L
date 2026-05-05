@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class User extends Authenticatable
 {
@@ -39,6 +40,16 @@ class User extends Authenticatable
         return $this->belongsTo(Tenant::class);
     }
 
+    public function rentalApplications(): HasMany
+    {
+        return $this->hasMany(RentalApplication::class);
+    }
+
+    public function applicationPayments(): HasMany
+    {
+        return $this->hasMany(ApplicationPayment::class);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     public function isAdmin(): bool
@@ -48,6 +59,11 @@ class User extends Authenticatable
 
     public function isTenant(): bool
     {
-        return $this->role === 'tenant';
+        return $this->tenant_id !== null;
+    }
+
+    public function isApplicant(): bool
+    {
+        return $this->role === 'applicant' && $this->tenant_id === null;
     }
 }

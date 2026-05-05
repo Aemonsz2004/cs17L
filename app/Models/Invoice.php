@@ -10,6 +10,7 @@ class Invoice extends Model
     protected $fillable = [
         'invoice_no',
         'tenant_id',
+        'lease_id',
         'period',
         'rent',
         'utilities',
@@ -19,11 +20,14 @@ class Invoice extends Model
         'paid_date',
         'method',
         'status',
+        'reference',
+        'confirmed_at',
     ];
 
     protected $casts = [
         'due_date'  => 'date',
         'paid_date' => 'date',
+        'confirmed_at' => 'datetime',
         'rent'      => 'integer',
         'utilities' => 'integer',
         'penalty'   => 'integer',
@@ -35,6 +39,28 @@ class Invoice extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function lease(): BelongsTo
+    {
+        return $this->belongsTo(Lease::class);
+    }
+
+    // ── Scopes ────────────────────────────────────────────────────────────────
+
+    public function scopePendingBankTransfer($query)
+    {
+        return $query->where('method', 'Bank Transfer')
+            ->where('status', 'due')
+            ->whereNull('confirmed_at');
+    }
+
+    public function scopeAwaitingConfirmation($query)
+    {
+        return $query->where('method', 'Bank Transfer')
+            ->where('status', 'due')
+            ->whereNotNull('reference')
+            ->whereNull('confirmed_at');
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

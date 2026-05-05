@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\Lease;
 use App\Models\Tenant;
 use App\Models\Unit;
 use App\Models\User;
@@ -20,7 +21,9 @@ class TenantController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'tenants',
-            'tenants' => Tenant::latest()->get(),
+            'tenants' => Tenant::with([
+                'leases' => fn ($query) => $query->orderByDesc('start_date')->orderByDesc('id'),
+            ])->latest()->get(),
             'invoices' => Invoice::latest()->get(),
             'units' => Unit::orderBy('floor')->orderBy('number')->get(),
         ]);
@@ -30,7 +33,9 @@ class TenantController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'tenants',
-            'tenant' => $tenant,
+            'tenant' => $tenant->load([
+                'leases' => fn ($query) => $query->orderByDesc('start_date')->orderByDesc('id'),
+            ]),
         ]);
     }
 
@@ -72,13 +77,28 @@ class TenantController extends Controller
 
             $tenant = Tenant::create($data);
 
-            User::create([
+            Lease::create([
+                'tenant_id' => $tenant->id,
+                'unit_id' => $unit->id,
+                'start_date' => $data['lease_start'],
+                'end_date' => $data['lease_end'],
+                'rent' => $data['rent'],
+                'deposit' => $data['deposit'],
+                'payment_method' => $data['payment_method'],
+                'status' => in_array($data['status'], ['active', 'expiring', 'overdue'], true) ? $data['status'] : 'active',
+            ]);
+
+            $tenantUser = User::create([
                 'name' => $tenant->name,
                 'email' => $tenant->email,
                 'password' => $temporaryPassword,
                 'role' => 'tenant',
                 'tenant_id' => $tenant->id,
                 'must_change_password' => true,
+            ]);
+
+            $tenant->update([
+                'user_id' => $tenantUser->id,
             ]);
 
             $unit->update([
@@ -124,6 +144,11 @@ class TenantController extends Controller
 
             if ($nextUnitNumber !== $previousUnitNumber) {
                 $nextUnit = Unit::where('number', $nextUnitNumber)->lockForUpdate()->firstOrFail();
+                $currentLease = Lease::where('tenant_id', $tenant->id)
+                    ->whereIn('status', ['active', 'expiring', 'overdue'])
+                    ->latest('id')
+                    ->lockForUpdate()
+                    ->first();
 
                 if ($nextUnit->tenant_id !== null || $nextUnit->status !== 'vacant') {
                     throw ValidationException::withMessages([
@@ -136,6 +161,24 @@ class TenantController extends Controller
                 $data['rent'] = $data['rent'] ?? $nextUnit->base_rent;
 
                 $tenant->update($data);
+
+                if ($currentLease) {
+                    $currentLease->update([
+                        'status' => 'ended',
+                        'ended_at' => now(),
+                    ]);
+                }
+
+                Lease::create([
+                    'tenant_id' => $tenant->id,
+                    'unit_id' => $nextUnit->id,
+                    'start_date' => $data['lease_start'] ?? $tenant->lease_start,
+                    'end_date' => $data['lease_end'] ?? $tenant->lease_end,
+                    'rent' => $data['rent'] ?? $tenant->rent,
+                    'deposit' => $data['deposit'] ?? $tenant->deposit,
+                    'payment_method' => $data['payment_method'] ?? $tenant->payment_method,
+                    'status' => in_array($tenant->status, ['active', 'expiring', 'overdue'], true) ? $tenant->status : 'active',
+                ]);
 
                 Unit::where('number', $previousUnitNumber)
                     ->where('tenant_id', $tenant->id)
@@ -154,6 +197,46 @@ class TenantController extends Controller
 
             $tenant->update($data);
 
+            $currentLease = Lease::where('tenant_id', $tenant->id)
+                ->whereIn('status', ['active', 'expiring', 'overdue'])
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
+
+            if ($currentLease) {
+                $leaseFieldsChanged = isset($data['lease_start'])
+                    || isset($data['lease_end'])
+                    || isset($data['rent'])
+                    || isset($data['deposit'])
+                    || isset($data['payment_method']);
+
+                if ($leaseFieldsChanged) {
+                    $currentLease->update([
+                        'status' => 'ended',
+                        'ended_at' => now(),
+                    ]);
+
+                    $currentUnit = Unit::where('number', $tenant->unit)->lockForUpdate()->first();
+
+                    if ($currentUnit) {
+                        Lease::create([
+                            'tenant_id' => $tenant->id,
+                            'unit_id' => $currentUnit->id,
+                            'start_date' => $data['lease_start'] ?? $tenant->lease_start,
+                            'end_date' => $data['lease_end'] ?? $tenant->lease_end,
+                            'rent' => $data['rent'] ?? $tenant->rent,
+                            'deposit' => $data['deposit'] ?? $tenant->deposit,
+                            'payment_method' => $data['payment_method'] ?? $tenant->payment_method,
+                            'status' => in_array($tenant->status, ['active', 'expiring', 'overdue'], true) ? $tenant->status : 'active',
+                        ]);
+                    }
+                } else {
+                    $currentLease->update([
+                        'status' => in_array($tenant->status, ['active', 'expiring', 'overdue'], true) ? $tenant->status : 'active',
+                    ]);
+                }
+            }
+
             Unit::where('number', $tenant->unit)
                 ->where('tenant_id', $tenant->id)
                 ->update([
@@ -164,9 +247,111 @@ class TenantController extends Controller
         return redirect()->route('admin.tenants.index')->with('success', 'Tenant updated.');
     }
 
+    public function renew(Request $request, Tenant $tenant): RedirectResponse
+    {
+        $data = $request->validate([
+            'lease_start' => ['required', 'date'],
+            'lease_end' => ['required', 'date', 'after_or_equal:lease_start'],
+            'rent' => ['required', 'integer', 'min:0'],
+            'deposit' => ['required', 'integer', 'min:0'],
+            'payment_method' => ['required', 'in:GCash,Bank Transfer,Cash'],
+            'terms' => ['nullable', 'string'],
+        ]);
+
+        DB::transaction(function () use ($tenant, $data): void {
+            // Guard 1: the renewal period must not overlap any existing lease period.
+            $hasOverlap = Lease::where('tenant_id', $tenant->id)
+                ->whereDate('start_date', '<=', $data['lease_end'])
+                ->whereDate('end_date', '>=', $data['lease_start'])
+                ->lockForUpdate()
+                ->exists();
+
+            if ($hasOverlap) {
+                throw ValidationException::withMessages([
+                    'lease_start' => 'Renewal dates overlap an existing lease record. Start the new lease after the current term ends.',
+                ]);
+            }
+
+            // Guard 2: if an active lease exists, renewal must start after it ends.
+            $currentLease = Lease::where('tenant_id', $tenant->id)
+                ->whereIn('status', ['active', 'expiring', 'overdue'])
+                ->latest('end_date')
+                ->lockForUpdate()
+                ->first();
+
+            $currentLeaseEnd = $currentLease !== null
+                ? substr((string) $currentLease->end_date, 0, 10)
+                : null;
+
+            if ($currentLeaseEnd !== null && $data['lease_start'] <= $currentLeaseEnd) {
+                throw ValidationException::withMessages([
+                    'lease_start' => 'Renewal start date must be after the current lease end date (' . $currentLeaseEnd . ').',
+                ]);
+            }
+
+            $unit = Unit::where('number', $tenant->unit)->lockForUpdate()->first();
+
+            if ($unit === null) {
+                throw ValidationException::withMessages([
+                    'unit' => 'Assigned unit record is missing.',
+                ]);
+            }
+
+            if ($unit->tenant_id !== null && $unit->tenant_id !== $tenant->id) {
+                throw ValidationException::withMessages([
+                    'unit' => 'Assigned unit is no longer linked to this tenant.',
+                ]);
+            }
+
+            Lease::where('tenant_id', $tenant->id)
+                ->whereIn('status', ['active', 'expiring', 'overdue'])
+                ->update([
+                    'status' => 'ended',
+                    'ended_at' => now(),
+                ]);
+
+            Lease::create([
+                'tenant_id' => $tenant->id,
+                'unit_id' => $unit->id,
+                'start_date' => $data['lease_start'],
+                'end_date' => $data['lease_end'],
+                'rent' => $data['rent'],
+                'deposit' => $data['deposit'],
+                'payment_method' => $data['payment_method'],
+                'terms' => $data['terms'] ?? null,
+                'status' => 'active',
+            ]);
+
+            $tenant->update([
+                'floor' => $unit->floor,
+                'type' => $unit->type,
+                'rent' => $data['rent'],
+                'deposit' => $data['deposit'],
+                'lease_start' => $data['lease_start'],
+                'lease_end' => $data['lease_end'],
+                'payment_method' => $data['payment_method'],
+                'status' => 'active',
+            ]);
+
+            $unit->update([
+                'tenant_id' => $tenant->id,
+                'status' => 'occupied',
+            ]);
+        });
+
+        return redirect()->route('admin.tenants.index')->with('success', 'Lease renewed successfully.');
+    }
+
     public function destroy(Tenant $tenant): RedirectResponse
     {
         DB::transaction(function () use ($tenant): void {
+            Lease::where('tenant_id', $tenant->id)
+                ->whereIn('status', ['active', 'expiring', 'overdue'])
+                ->update([
+                    'status' => 'ended',
+                    'ended_at' => now(),
+                ]);
+
             Unit::where('number', $tenant->unit)
                 ->where('tenant_id', $tenant->id)
                 ->update([

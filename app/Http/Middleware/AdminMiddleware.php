@@ -20,6 +20,12 @@ class AdminMiddleware
         }
 
         if (! $request->user()->isAdmin()) {
+            if ($request->user()->isApplicant()) {
+                return redirect()
+                    ->route('applicant.dashboard')
+                    ->with('error', 'You do not have admin access.');
+            }
+
             // Tenants get bounced to their own dashboard
             return redirect()
                 ->route('tenant.home')
