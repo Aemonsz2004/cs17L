@@ -38,7 +38,7 @@ export default function TenantApp({
     messages,
 }) {
     const [page] = useState(initialPage);
-    const { auth, unread_count } = usePage().props;
+    const { auth, unread_count, archivedNotifications } = usePage().props;
     const userName = auth?.user?.name ?? 'Tenant';
     const initials = userName
         .split(' ')
@@ -84,7 +84,10 @@ export default function TenantApp({
                 return <MessagesPage messages={messages} />;
             case 'notifications':
                 return (
-                    <TenantNotificationsPage notifications={notifications} />
+                    <TenantNotificationsPage
+                        notifications={notifications}
+                        archivedNotifications={archivedNotifications}
+                    />
                 );
         }
     };

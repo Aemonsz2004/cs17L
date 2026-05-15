@@ -15,6 +15,7 @@ class NotificationController extends Controller
         return Inertia::render('welcome', [
             'initialPage' => 'notifications',
             'notifications' => RtmsNotification::admin()->latest()->get(),
+            'archivedNotifications' => RtmsNotification::admin()->onlyTrashed()->latest('deleted_at')->get(),
         ]);
     }
 
@@ -30,5 +31,25 @@ class NotificationController extends Controller
         $notification->update(['unread' => false]);
 
         return redirect()->route('admin.notifications.index')->with('success', 'Notification marked as read.');
+    }
+
+    public function destroy(RtmsNotification $notification): RedirectResponse
+    {
+        $notification->delete();
+
+        return redirect()->route('admin.notifications.index')->with('success', 'Notification archived.');
+    }
+
+    public function restore(int $notificationId): RedirectResponse
+    {
+        $notification = RtmsNotification::withTrashed()->findOrFail($notificationId);
+
+        if (! $notification->trashed()) {
+            return redirect()->route('admin.notifications.index')->with('success', 'Notification is already active.');
+        }
+
+        $notification->restore();
+
+        return redirect()->route('admin.notifications.index')->with('success', 'Notification restored.');
     }
 }

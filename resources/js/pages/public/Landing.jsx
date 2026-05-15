@@ -85,6 +85,11 @@ export default function Landing({ property, featuredUnits = [] }) {
                                     <p className="text-sm text-[#42506b]">
                                         {unit.floor} · {unit.type} · {unit.area} sqm
                                     </p>
+                                    {unit.description ? (
+                                        <p className="mt-2 text-sm leading-6 text-[#42506b]">
+                                            {unit.description}
+                                        </p>
+                                    ) : null}
                                     <p className="mt-2 text-xl font-black text-[#1d7b6e]">
                                         P{Number(unit.base_rent).toLocaleString()}/month
                                     </p>

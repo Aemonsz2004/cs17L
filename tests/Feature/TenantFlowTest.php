@@ -93,6 +93,7 @@ it('allows tenant to submit payment for own invoice', function () {
         ->post(route('tenant.pay-rent.submit'), [
             'invoice_id' => $invoice->id,
             'method' => 'GCash',
+            'reference' => 'GCASH-REF-001',
         ])
         ->assertRedirect(route('tenant.pay-rent'));
 
@@ -128,6 +129,7 @@ it('blocks tenant from paying another tenants invoice', function () {
         ->post(route('tenant.pay-rent.submit'), [
             'invoice_id' => $invoiceB->id,
             'method' => 'GCash',
+            'reference' => 'GCASH-REF-002',
         ])
         ->assertNotFound();
 

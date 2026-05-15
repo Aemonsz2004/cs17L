@@ -20,14 +20,17 @@ const categoryLabel = (category) => {
     if (category === 'maintenance') return 'Maintenance';
     return 'System';
 };
-export default function TenantNotificationsPage({ notifications }) {
+export default function TenantNotificationsPage({ notifications, archivedNotifications }) {
+    const [viewMode, setViewMode] = useState('active');
     const [category, setCategory] = useState('all');
     const [unreadOnly, setUnreadOnly] = useState(false);
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [selected, setSelected] = useState(null);
     const [detailOpen, setDetailOpen] = useState(false);
-    const items = notifications ?? [];
+    const items = viewMode === 'active'
+        ? notifications ?? []
+        : archivedNotifications ?? [];
     const unreadCount = items.filter((n) => n.unread).length;
     const q = search.trim().toLowerCase();
     const filtered = items.filter((n) => {
@@ -51,6 +54,12 @@ export default function TenantNotificationsPage({ notifications }) {
     useEffect(() => {
         setPage(1);
     }, [category, unreadOnly, search]);
+    useEffect(() => {
+        if (viewMode !== 'active') {
+            setUnreadOnly(false);
+        }
+        setPage(1);
+    }, [viewMode]);
     const perPage = 8;
     const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
     const currentPage = Math.min(page, totalPages);
@@ -59,7 +68,7 @@ export default function TenantNotificationsPage({ notifications }) {
     const openNotification = (notification) => {
         setSelected(notification);
         setDetailOpen(true);
-        if (notification.unread) {
+        if (viewMode === 'active' && notification.unread) {
             router.patch(
                 `/tenant/notifications/${notification.id}/read`,
                 {},
@@ -67,8 +76,40 @@ export default function TenantNotificationsPage({ notifications }) {
             );
         }
     };
+    const archiveNotification = () => {
+        if (!selected) return;
+        if (!window.confirm('Archive this notification?')) {
+            return;
+        }
+        router.delete(`/tenant/notifications/${selected.id}`);
+    };
+    const restoreNotification = () => {
+        if (!selected) return;
+        if (!window.confirm('Restore this notification?')) {
+            return;
+        }
+        router.post(`/tenant/notifications/${selected.id}/restore`);
+    };
     return (
         <div className="max-w-3xl space-y-5">
+            <div className="flex items-center justify-end">
+                <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                    {['active', 'archived'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setViewMode(tab)}
+                            className={[
+                                'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                viewMode === tab
+                                    ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                    : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                            ].join(' ')}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
+            </div>
             {/* ── Summary ── */}
             <div className="grid grid-cols-4 gap-3">
                 {[
@@ -131,6 +172,7 @@ export default function TenantNotificationsPage({ notifications }) {
                                         ? 'border-[#1B2B4B] bg-[#1B2B4B] text-white'
                                         : 'border-[#1B2B4B]/15 bg-white text-[#5C6B88] hover:bg-[#F5F0E8]',
                                 ].join(' ')}
+                                disabled={viewMode !== 'active'}
                             >
                                 {unreadOnly ? 'Showing Unread' : 'Show Unread'}
                                 {unreadCount > 0 && (
@@ -147,6 +189,7 @@ export default function TenantNotificationsPage({ notifications }) {
                                         '/tenant/notifications/read-all',
                                     )
                                 }
+                                disabled={viewMode !== 'active'}
                             >
                                 Mark All Read
                             </Button>
@@ -259,12 +302,29 @@ export default function TenantNotificationsPage({ notifications }) {
                     title="Notification Detail"
                     size="md"
                     footer={
-                        <Button
-                            variant="primary"
-                            onClick={() => setDetailOpen(false)}
-                        >
-                            Close
-                        </Button>
+                        <div className="flex w-full items-center justify-between">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setDetailOpen(false)}
+                            >
+                                Close
+                            </Button>
+                            {viewMode === 'active' ? (
+                                <Button
+                                    variant="danger"
+                                    onClick={archiveNotification}
+                                >
+                                    Archive
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="primary"
+                                    onClick={restoreNotification}
+                                >
+                                    Restore
+                                </Button>
+                            )}
+                        </div>
                     }
                 >
                     <div className="space-y-3">

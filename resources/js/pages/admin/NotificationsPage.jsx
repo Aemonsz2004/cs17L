@@ -1,4 +1,5 @@
 // src/pages/admin/NotificationsPage.jsx
+import { router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
@@ -29,9 +30,12 @@ const categoryLabel = (category) => {
 };
 export default function NotificationsPage({
     notifications,
+    archivedNotifications,
     onChangeNotifications,
+    onChangeArchived,
     onNavigate,
 }) {
+    const [viewMode, setViewMode] = useState('active');
     const [category, setCategory] = useState('all');
     const [showUnreadOnly, setShowUnreadOnly] = useState(false);
     const [search, setSearch] = useState('');
@@ -43,9 +47,10 @@ export default function NotificationsPage({
         () => notifications.filter((n) => n.unread).length,
         [notifications],
     );
+    const items = viewMode === 'active' ? notifications : archivedNotifications;
     const filtered = useMemo(
         () =>
-            notifications.filter((n) => {
+            items.filter((n) => {
                 const matchCat = category === 'all' || n.category === category;
                 const matchUnread = !showUnreadOnly || n.unread;
                 const keyword = search.toLowerCase().trim();
@@ -53,11 +58,17 @@ export default function NotificationsPage({
                     !keyword || n.message.toLowerCase().includes(keyword);
                 return matchCat && matchUnread && matchSearch;
             }),
-        [notifications, category, showUnreadOnly, search],
+        [items, category, showUnreadOnly, search],
     );
     useEffect(() => {
         setPage(1);
     }, [category, showUnreadOnly, search]);
+    useEffect(() => {
+        if (viewMode !== 'active') {
+            setShowUnreadOnly(false);
+        }
+        setPage(1);
+    }, [viewMode]);
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     const currentPage = Math.min(page, totalPages);
     const pagedNotifications = filtered.slice(
@@ -65,6 +76,17 @@ export default function NotificationsPage({
         currentPage * pageSize,
     );
     const markAsRead = (id) => {
+        if (viewMode !== 'active') {
+            return;
+        }
+        router.patch(
+            `/admin/notifications/${id}/read`,
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+            },
+        );
         onChangeNotifications((prev) =>
             prev.map((notification) =>
                 notification.id === id
@@ -74,12 +96,43 @@ export default function NotificationsPage({
         );
     };
     const markAllRead = () => {
+        if (viewMode !== 'active') {
+            return;
+        }
         if (!window.confirm('Mark all notifications as read?')) {
             return;
         }
+        router.post(
+            '/admin/notifications/read-all',
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+            },
+        );
         onChangeNotifications((prev) =>
             prev.map((notification) => ({ ...notification, unread: false })),
         );
+    };
+    const archiveNotification = (notification) => {
+        if (!window.confirm('Archive this notification?')) {
+            return;
+        }
+        router.delete(`/admin/notifications/${notification.id}`);
+        onChangeNotifications((prev) =>
+            prev.filter((item) => item.id !== notification.id),
+        );
+        onChangeArchived((prev) => [notification, ...prev]);
+    };
+    const restoreNotification = (notification) => {
+        if (!window.confirm('Restore this notification?')) {
+            return;
+        }
+        router.post(`/admin/notifications/${notification.id}/restore`);
+        onChangeArchived((prev) =>
+            prev.filter((item) => item.id !== notification.id),
+        );
+        onChangeNotifications((prev) => [notification, ...prev]);
     };
     const openDetails = (notification) => {
         markAsRead(notification.id);
@@ -93,7 +146,9 @@ export default function NotificationsPage({
     const openNotification = (notification) => {
         setSelected(notification);
         setDetailOpen(true);
-        markAsRead(notification.id);
+        if (viewMode === 'active') {
+            markAsRead(notification.id);
+        }
     };
     return (
         <div className="space-y-5">
@@ -101,12 +156,12 @@ export default function NotificationsPage({
             <div className="grid grid-cols-4 gap-4">
                 <MetricCard
                     label="Total"
-                    value={notifications.length}
+                    value={items.length}
                     sub="All notifications"
                 />
                 <MetricCard
                     label="Unread"
-                    value={unreadCount}
+                    value={viewMode === 'active' ? unreadCount : 0}
                     sub="Need attention"
                     trend="down"
                     iconBg="bg-red-50 text-red-400"
@@ -114,7 +169,7 @@ export default function NotificationsPage({
                 <MetricCard
                     label="Payments"
                     value={
-                        notifications.filter((n) => n.category === 'payment')
+                        items.filter((n) => n.category === 'payment')
                             .length
                     }
                     sub="Payment alerts"
@@ -122,7 +177,7 @@ export default function NotificationsPage({
                 <MetricCard
                     label="Maintenance"
                     value={
-                        notifications.filter(
+                        items.filter(
                             (n) => n.category === 'maintenance',
                         ).length
                     }
@@ -135,6 +190,22 @@ export default function NotificationsPage({
                     title="Notifications"
                     action={
                         <div className="flex items-center gap-2">
+                            <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                                {['active', 'archived'].map((tab) => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setViewMode(tab)}
+                                        className={[
+                                            'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                            viewMode === tab
+                                                ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                                : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                                        ].join(' ')}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
                             <Input
                                 placeholder="Search notifications..."
                                 value={search}
@@ -152,23 +223,26 @@ export default function NotificationsPage({
                                         ? 'border-[#1B2B4B] bg-[#1B2B4B] text-white'
                                         : 'border-[#1B2B4B]/15 bg-white text-[#5C6B88] hover:bg-[#F5F0E8]',
                                 ].join(' ')}
+                                disabled={viewMode !== 'active'}
                             >
                                 {showUnreadOnly
                                     ? 'Showing Unread'
                                     : 'Show Unread Only'}
-                                {unreadCount > 0 && (
+                                {viewMode === 'active' && unreadCount > 0 && (
                                     <span className="ml-1.5 rounded-full bg-red-400 px-1.5 py-0.5 text-[9px] font-bold text-white">
                                         {unreadCount}
                                     </span>
                                 )}
                             </button>
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={markAllRead}
-                            >
-                                Mark All Read
-                            </Button>
+                            {viewMode === 'active' && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={markAllRead}
+                                >
+                                    Mark All Read
+                                </Button>
+                            )}
                         </div>
                     }
                 />
@@ -196,8 +270,8 @@ export default function NotificationsPage({
                                 ].join(' ')}
                             >
                                 {c.key === 'all'
-                                    ? notifications.length
-                                    : notifications.filter(
+                                    ? items.length
+                                    : items.filter(
                                           (n) => n.category === c.key,
                                       ).length}
                             </span>
@@ -244,7 +318,8 @@ export default function NotificationsPage({
                                 : (currentPage - 1) * pageSize + 1}
                             -{Math.min(currentPage * pageSize, filtered.length)}{' '}
                             of {filtered.length}
-                            {showUnreadOnly && ' (unread only)'}
+                            {showUnreadOnly && viewMode === 'active' &&
+                                ' (unread only)'}
                         </span>
                         <div className="flex items-center gap-2">
                             <Button
@@ -284,43 +359,65 @@ export default function NotificationsPage({
                     title="Notification Detail"
                     size="md"
                     footer={
-                        <div className="flex w-full items-center justify-end gap-2">
-                            {selected.unread && (
+                        <div className="flex w-full items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                {viewMode === 'active' && selected.unread && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            if (
+                                                window.confirm(
+                                                    'Mark this notification as read?',
+                                                )
+                                            ) {
+                                                markAsRead(selected.id);
+                                                setSelected((prev) =>
+                                                    prev
+                                                        ? {
+                                                              ...prev,
+                                                              unread: false,
+                                                          }
+                                                        : prev,
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        Mark as Read
+                                    </Button>
+                                )}
+                                {viewMode === 'active' && (
+                                    <Button
+                                        variant="primary"
+                                        onClick={() => {
+                                            if (
+                                                window.confirm(
+                                                    'Open related page for this notification?',
+                                                )
+                                            ) {
+                                                openDetails(selected);
+                                                setDetailOpen(false);
+                                            }
+                                        }}
+                                    >
+                                        View More
+                                    </Button>
+                                )}
+                            </div>
+                            {viewMode === 'active' ? (
                                 <Button
-                                    variant="outline"
-                                    onClick={() => {
-                                        if (
-                                            window.confirm(
-                                                'Mark this notification as read?',
-                                            )
-                                        ) {
-                                            markAsRead(selected.id);
-                                            setSelected((prev) =>
-                                                prev
-                                                    ? { ...prev, unread: false }
-                                                    : prev,
-                                            );
-                                        }
-                                    }}
+                                    variant="danger"
+                                    onClick={() => archiveNotification(selected)}
                                 >
-                                    Mark as Read
+                                    Archive
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="primary"
+                                    onClick={() => restoreNotification(selected)}
+                                >
+                                    Restore
                                 </Button>
                             )}
-                            <Button
-                                variant="primary"
-                                onClick={() => {
-                                    if (
-                                        window.confirm(
-                                            'Open related page for this notification?',
-                                        )
-                                    ) {
-                                        openDetails(selected);
-                                        setDetailOpen(false);
-                                    }
-                                }}
-                            >
-                                View More
-                            </Button>
                         </div>
                     }
                 >

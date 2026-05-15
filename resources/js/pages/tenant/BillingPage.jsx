@@ -1,6 +1,6 @@
 // src/pages/tenant/BillingPage.jsx
 import { useState } from 'react';
-import { usePage } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
@@ -23,7 +23,7 @@ const methodBadge = (m) => {
 };
 // ─────────────────────────────────────────────────────────────────────────────
 export default function TenantBillingPage({ onPayRent }) {
-    const { invoices } = usePage().props;
+    const { invoices, archivedInvoices } = usePage().props;
     const mappedInvoices = (invoices ?? []).map((invoice) => ({
         id: invoice.id,
         invoiceNo: invoice.invoice_no,
@@ -40,8 +40,27 @@ export default function TenantBillingPage({ onPayRent }) {
         method: invoice.method,
         status: invoice.status,
     }));
-    const history = mappedInvoices;
-    const nextInvoice = history.find((invoice) => invoice.status !== 'paid');
+    const mappedArchivedInvoices = (archivedInvoices ?? []).map((invoice) => ({
+        id: invoice.id,
+        invoiceNo: invoice.invoice_no,
+        tenantId: invoice.tenant_id,
+        tenant: 'Current Tenant',
+        unit: '-',
+        period: invoice.period,
+        rent: invoice.rent,
+        utilities: invoice.utilities,
+        penalty: invoice.penalty,
+        total: invoice.total,
+        dueDate: invoice.due_date,
+        paidDate: invoice.paid_date,
+        method: invoice.method,
+        status: invoice.status,
+    }));
+    const [viewMode, setViewMode] = useState('active');
+    const history = viewMode === 'active' ? mappedInvoices : mappedArchivedInvoices;
+    const nextInvoice = viewMode === 'active'
+        ? history.find((invoice) => invoice.status !== 'paid')
+        : null;
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
@@ -77,8 +96,40 @@ export default function TenantBillingPage({ onPayRent }) {
         setSelected(inv);
         setModalOpen(true);
     };
+    const archiveInvoice = () => {
+        if (!selected) return;
+        if (!window.confirm('Archive this invoice?')) {
+            return;
+        }
+        router.delete(`/tenant/billing/${selected.id}`);
+    };
+    const restoreInvoice = () => {
+        if (!selected) return;
+        if (!window.confirm('Restore this invoice?')) {
+            return;
+        }
+        router.post(`/tenant/billing/${selected.id}/restore`);
+    };
     return (
         <div className="max-w-4xl space-y-5">
+            <div className="flex items-center justify-end">
+                <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                    {['active', 'archived'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setViewMode(tab)}
+                            className={[
+                                'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                viewMode === tab
+                                    ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                    : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                            ].join(' ')}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
+            </div>
             {history.length === 0 && (
                 <Card>
                     <Card.Body>
@@ -96,7 +147,7 @@ export default function TenantBillingPage({ onPayRent }) {
             )}
 
             {/* ── Summary row ── */}
-            {nextInvoice && (
+            {viewMode === 'active' && nextInvoice && (
                 <div className="grid grid-cols-3 gap-4">
                     <div className="rounded-xl border border-[#1B2B4B]/10 bg-white p-5 shadow-sm">
                         <p className="mb-1 text-[10px] font-bold tracking-widest text-[#5C6B88] uppercase">
@@ -159,7 +210,7 @@ export default function TenantBillingPage({ onPayRent }) {
             )}
 
             {/* ── Upcoming invoice ── */}
-            {nextInvoice && (
+            {viewMode === 'active' && nextInvoice && (
                 <Card>
                     <Card.Header
                         title={`Upcoming — ${nextInvoice.period}`}
@@ -332,25 +383,43 @@ export default function TenantBillingPage({ onPayRent }) {
                     title="Invoice Detail"
                     size="sm"
                     footer={
-                        <>
+                        <div className="flex w-full items-center justify-between">
                             <Button
                                 variant="ghost"
                                 onClick={() => setModalOpen(false)}
                             >
                                 Close
                             </Button>
-                            {selected.status !== 'paid' && (
-                                <Button
-                                    variant="primary"
-                                    onClick={() => {
-                                        setModalOpen(false);
-                                        onPayRent();
-                                    }}
-                                >
-                                    Pay Now
-                                </Button>
-                            )}
-                        </>
+                            <div className="flex items-center gap-2">
+                                {viewMode === 'active' &&
+                                    selected.status !== 'paid' && (
+                                        <Button
+                                            variant="primary"
+                                            onClick={() => {
+                                                setModalOpen(false);
+                                                onPayRent();
+                                            }}
+                                        >
+                                            Pay Now
+                                        </Button>
+                                    )}
+                                {viewMode === 'active' ? (
+                                    <Button
+                                        variant="danger"
+                                        onClick={archiveInvoice}
+                                    >
+                                        Archive
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="primary"
+                                        onClick={restoreInvoice}
+                                    >
+                                        Restore
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
                     }
                 >
                     {/* Status banner */}

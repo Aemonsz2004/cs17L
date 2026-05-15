@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RtmsNotification extends Model
 {
+    use SoftDeletes;
+
     // Matches the migration table name: rtms_notifications
     protected $table = 'rtms_notifications';
 

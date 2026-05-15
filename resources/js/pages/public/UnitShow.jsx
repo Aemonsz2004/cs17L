@@ -47,6 +47,12 @@ export default function UnitShow({ property, unit, canApply }) {
                                 {unit?.floor} · {unit?.type}
                             </p>
 
+                            {unit?.description ? (
+                                <div className="mt-5 rounded-2xl bg-[#FAF8F4] p-4 text-sm text-[#42506b]">
+                                    {unit.description}
+                                </div>
+                            ) : null}
+
                             <div className="mt-5 space-y-2">
                                 {Object.entries(unit?.specs ?? {}).map(([label, value]) => (
                                     <div key={label} className="flex items-center justify-between rounded-lg bg-[#f8fafc] px-3 py-2 text-sm">

@@ -5,6 +5,7 @@ import Button from '../../components/Button';
 import InfoRow from '../../components/InfoRow';
 import { formatDateDisplay } from '../../lib/date';
 import { useMemo } from 'react';
+import { router } from '@inertiajs/react';
 function leaseProgressPct(start, end) {
     const startDate = new Date(start);
     const endDate = new Date(end);
@@ -301,7 +302,11 @@ export default function LeasePage({ tenant, invoices = [] }) {
                             admin to discuss renewal terms.
                         </p>
                     </div>
-                    <Button variant="primary" size="sm">
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => router.visit('/tenant/messages')}
+                    >
                         Request Renewal
                     </Button>
                 </div>

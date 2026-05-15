@@ -35,9 +35,30 @@ class ApplicationReviewController extends Controller
             ->latest()
             ->get();
 
+        $archivedApplications = RentalApplication::onlyTrashed()
+            ->with([
+                'user:id,name,email',
+                'unit:id,number,floor,type,area,base_rent,status,reserved_until',
+                'latestPayment' => function ($query): void {
+                    $query->select([
+                        'application_payments.id',
+                        'application_payments.rental_application_id',
+                        'application_payments.provider_reference',
+                        'application_payments.payment_method',
+                        'application_payments.status',
+                        'application_payments.checkout_url',
+                        'application_payments.verified_at',
+                        'application_payments.expires_at',
+                    ]);
+                },
+            ])
+            ->latest('deleted_at')
+            ->get();
+
         return Inertia::render('welcome', [
             'initialPage' => 'applications',
             'applications' => $applications,
+            'archivedApplications' => $archivedApplications,
         ]);
     }
 
@@ -109,7 +130,7 @@ class ApplicationReviewController extends Controller
         $data = $request->validate([
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-            'payment_method' => ['nullable', 'in:GCash,Bank Transfer,Cash'],
+            'payment_method' => ['nullable', 'in:GCash,Cash'],
         ]);
 
         $data['admin_id'] = Auth::id();
@@ -124,5 +145,25 @@ class ApplicationReviewController extends Controller
             ->route('admin.applications.index')
             ->with('success', 'Manual conversion override completed.')
             ->with('tenant_credentials', $credentials);
+    }
+
+    public function destroy(RentalApplication $application): RedirectResponse
+    {
+        $application->delete();
+
+        return redirect()->route('admin.applications.index')->with('success', 'Application archived.');
+    }
+
+    public function restore(int $applicationId): RedirectResponse
+    {
+        $application = RentalApplication::withTrashed()->findOrFail($applicationId);
+
+        if (! $application->trashed()) {
+            return redirect()->route('admin.applications.index')->with('success', 'Application is already active.');
+        }
+
+        $application->restore();
+
+        return redirect()->route('admin.applications.index')->with('success', 'Application restored.');
     }
 }

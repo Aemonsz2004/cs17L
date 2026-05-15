@@ -3,11 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Unit extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'number',
         'floor',
@@ -17,12 +20,15 @@ class Unit extends Model
         'status',
         'tenant_id',
         'reserved_until',
+        'description',
+        'gallery',
     ];
 
     protected $casts = [
         'area'      => 'integer',
         'base_rent' => 'integer',
         'reserved_until' => 'datetime',
+        'gallery' => 'array',
     ];
 
     // ── Relationships ─────────────────────────────────────────────────────────

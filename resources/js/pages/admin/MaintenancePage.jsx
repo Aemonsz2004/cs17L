@@ -27,7 +27,10 @@ const statusBadge = (s) => {
     return <Badge variant="green">Resolved</Badge>;
 };
 export default function MaintenancePage({ openAddSignal = 0 }) {
-    const { maintenance: maintenanceRows } = usePage().props;
+    const {
+        maintenance: maintenanceRows,
+        archivedMaintenance: archivedMaintenanceRows,
+    } = usePage().props;
     const mappedRequests = (maintenanceRows ?? []).map((request) => ({
         id: request.id,
         title: request.title,
@@ -43,9 +46,30 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
             : null,
         notes: request.notes,
     }));
+    const mappedArchivedRequests = (archivedMaintenanceRows ?? []).map(
+        (request) => ({
+            id: request.id,
+            title: request.title,
+            unit: request.unit,
+            tenant: request.tenant,
+            type: request.type,
+            priority: request.priority,
+            status: request.status,
+            submitted: formatDateDisplay(request.created_at, '-'),
+            assignedTo: request.assigned_to ?? null,
+            resolvedDate: request.resolved_date
+                ? formatDateDisplay(request.resolved_date, '-')
+                : null,
+            notes: request.notes,
+        }),
+    );
     const [filterStatus, setFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [requests, setRequests] = useState(mappedRequests);
+    const [archivedRequests, setArchivedRequests] = useState(
+        mappedArchivedRequests,
+    );
+    const [viewMode, setViewMode] = useState('active');
     const [selected, setSelected] = useState(null);
     const [detailOpen, setDetailOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
@@ -60,10 +84,11 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
         scheduledDate: '',
         description: '',
     });
-    const open = requests.filter((m) => m.status === 'open').length;
-    const inprogress = requests.filter((m) => m.status === 'inprogress').length;
-    const resolved = requests.filter((m) => m.status === 'resolved').length;
-    const filtered = requests.filter((request) => {
+    const currentRequests = viewMode === 'active' ? requests : archivedRequests;
+    const open = currentRequests.filter((m) => m.status === 'open').length;
+    const inprogress = currentRequests.filter((m) => m.status === 'inprogress').length;
+    const resolved = currentRequests.filter((m) => m.status === 'resolved').length;
+    const filtered = currentRequests.filter((request) => {
         const matchStatus =
             filterStatus === 'all' || request.status === filterStatus;
         const keyword = search.toLowerCase().trim();
@@ -85,6 +110,15 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
             lastHandledSignal.current = openAddSignal;
         }
     }, [openAddSignal, maintenanceRows]);
+    useEffect(() => {
+        setArchivedRequests(mappedArchivedRequests);
+    }, [archivedMaintenanceRows]);
+    useEffect(() => {
+        if (viewMode !== 'active') {
+            setDetailOpen(false);
+            setSelected(null);
+        }
+    }, [viewMode]);
     const updateRequest = (id, updater) => {
         setRequests((prev) =>
             prev.map((request) =>
@@ -94,6 +128,9 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
         setSelected((prev) => (prev && prev.id === id ? updater(prev) : prev));
     };
     const handleProgressAction = () => {
+        if (viewMode !== 'active') {
+            return;
+        }
         if (!selected) return;
         const actionLabel =
             selected.status === 'open'
@@ -116,6 +153,9 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
         });
     };
     const createRequest = () => {
+        if (viewMode !== 'active') {
+            return;
+        }
         if (!newRequest.unit || !newRequest.tenant || !newRequest.description) {
             return;
         }
@@ -190,6 +230,20 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
             ),
         },
     ];
+    const archiveRequest = () => {
+        if (!selected) return;
+        if (!window.confirm('Archive this request?')) {
+            return;
+        }
+        router.delete(`/admin/maintenance/${selected.id}`);
+    };
+    const restoreRequest = () => {
+        if (!selected) return;
+        if (!window.confirm('Restore this request?')) {
+            return;
+        }
+        router.post(`/admin/maintenance/${selected.id}/restore`);
+    };
     return (
         <div className="space-y-5">
             {/* ── Metrics ── */}
@@ -226,6 +280,22 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
                     title="Maintenance Requests"
                     action={
                         <div className="flex gap-2">
+                            <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                                {['active', 'archived'].map((tab) => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setViewMode(tab)}
+                                        className={[
+                                            'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                            viewMode === tab
+                                                ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                                : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                                        ].join(' ')}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
                             <Input
                                 placeholder="Search request, tenant, unit..."
                                 value={search}
@@ -256,13 +326,15 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
                                     ),
                                 )}
                             </div>
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => setAddOpen(true)}
-                            >
-                                + New Request
-                            </Button>
+                            {viewMode === 'active' && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => setAddOpen(true)}
+                                >
+                                    + New Request
+                                </Button>
+                            )}
                         </div>
                     }
                 />
@@ -295,14 +367,25 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
                             >
                                 Close
                             </Button>
-                            {selected.status !== 'resolved' && (
-                                <Button
-                                    variant="primary"
-                                    onClick={handleProgressAction}
-                                >
-                                    {selected.status === 'open'
-                                        ? 'Assign & Start'
-                                        : 'Mark Resolved'}
+                            {viewMode === 'active' ? (
+                                <>
+                                    {selected.status !== 'resolved' && (
+                                        <Button
+                                            variant="primary"
+                                            onClick={handleProgressAction}
+                                        >
+                                            {selected.status === 'open'
+                                                ? 'Assign & Start'
+                                                : 'Mark Resolved'}
+                                        </Button>
+                                    )}
+                                    <Button variant="danger" onClick={archiveRequest}>
+                                        Archive
+                                    </Button>
+                                </>
+                            ) : (
+                                <Button variant="primary" onClick={restoreRequest}>
+                                    Restore
                                 </Button>
                             )}
                         </>

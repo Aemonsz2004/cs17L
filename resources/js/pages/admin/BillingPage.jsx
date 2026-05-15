@@ -34,7 +34,11 @@ const methodBadge = (m) => {
     return <Badge variant="gray">Cash</Badge>;
 };
 export default function BillingPage({ openAddSignal = 0 }) {
-    const { invoices: invoiceRows, tenants: tenantRows } = usePage().props;
+    const {
+        invoices: invoiceRows,
+        archivedInvoices: archivedInvoiceRows,
+        tenants: tenantRows,
+    } = usePage().props;
     const invoices = useMemo(
         () =>
             (invoiceRows ?? []).map((invoice) => ({
@@ -51,15 +55,38 @@ export default function BillingPage({ openAddSignal = 0 }) {
                 dueDate: invoice.due_date,
                 paidDate: invoice.paid_date,
                 method: invoice.method,
+                reference: invoice.reference,
                 status: invoice.status,
             })),
         [invoiceRows],
+    );
+    const archivedInvoices = useMemo(
+        () =>
+            (archivedInvoiceRows ?? []).map((invoice) => ({
+                id: invoice.id,
+                invoiceNo: invoice.invoice_no,
+                tenantId: invoice.tenant_id,
+                tenant: invoice.tenant?.name ?? `Tenant #${invoice.tenant_id}`,
+                unit: invoice.tenant?.unit ?? '-',
+                period: invoice.period,
+                rent: invoice.rent,
+                utilities: invoice.utilities,
+                penalty: invoice.penalty,
+                total: invoice.total,
+                dueDate: invoice.due_date,
+                paidDate: invoice.paid_date,
+                method: invoice.method,
+                reference: invoice.reference,
+                status: invoice.status,
+            })),
+        [archivedInvoiceRows],
     );
     const [filterStatus, setFilter] = useState('all');
     const [search, setSearch] = useState('');
     const [selected, setSelected] = useState(null);
     const [detailOpen, setDetailOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
+    const [viewMode, setViewMode] = useState('active');
     const lastHandledSignal = useRef(openAddSignal);
     const [form, setForm] = useState({
         tenantId: String(tenantRows?.[0]?.id ?? 1),
@@ -76,20 +103,27 @@ export default function BillingPage({ openAddSignal = 0 }) {
             lastHandledSignal.current = openAddSignal;
         }
     }, [openAddSignal]);
+    useEffect(() => {
+        if (viewMode !== 'active') {
+            setDetailOpen(false);
+            setSelected(null);
+        }
+    }, [viewMode]);
+    const visibleInvoices = viewMode === 'active' ? invoices : archivedInvoices;
     const totals = useMemo(() => {
-        const collected = invoices
+        const collected = visibleInvoices
             .filter((i) => i.status === 'paid')
             .reduce((s, i) => s + i.total, 0);
-        const pending = invoices
+        const pending = visibleInvoices
             .filter((i) => i.status === 'due')
             .reduce((s, i) => s + i.total, 0);
-        const overdueAmt = invoices
+        const overdueAmt = visibleInvoices
             .filter((i) => i.status === 'overdue')
             .reduce((s, i) => s + i.total, 0);
-        const totalBilled = invoices.reduce((s, i) => s + i.total, 0);
+        const totalBilled = visibleInvoices.reduce((s, i) => s + i.total, 0);
         return { collected, pending, overdueAmt, totalBilled };
-    }, [invoices]);
-    const filtered = invoices.filter((i) => {
+    }, [visibleInvoices]);
+    const filtered = visibleInvoices.filter((i) => {
         const matchSearch =
             i.tenant.toLowerCase().includes(search.toLowerCase()) ||
             i.invoiceNo.toLowerCase().includes(search.toLowerCase());
@@ -104,12 +138,33 @@ export default function BillingPage({ openAddSignal = 0 }) {
         router.patch(`/admin/billing/${selected.id}/mark-paid`);
     };
 
+    const markAsOverdue = () => {
+        if (!selected) return;
+        if (!window.confirm('Mark this invoice as overdue?')) {
+            return;
+        }
+        router.patch(`/admin/billing/${selected.id}/mark-overdue`);
+    };
+
     const confirmBankTransfer = () => {
         if (!selected) return;
         if (!window.confirm(`Confirm Bank Transfer for Invoice ${selected.invoiceNo}?`)) {
             return;
         }
         router.patch(`/admin/billing/${selected.id}/confirm-bank`);
+    };
+    const archiveInvoice = () => {
+        if (!selected) return;
+        if (!window.confirm('Archive this invoice?')) {
+            return;
+        }
+        router.delete(`/admin/billing/${selected.id}`);
+    };
+    const restoreInvoice = (invoiceId) => {
+        if (!window.confirm('Restore this invoice?')) {
+            return;
+        }
+        router.post(`/admin/billing/${invoiceId}/restore`);
     };
     const createInvoice = () => {
         const tenant = (tenantRows ?? []).find(
@@ -184,17 +239,30 @@ export default function BillingPage({ openAddSignal = 0 }) {
             width: 80,
             align: 'right',
             render: (_, row) => (
-                <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setSelected(row);
-                        setDetailOpen(true);
-                    }}
-                >
-                    View
-                </Button>
+                viewMode === 'active' ? (
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setSelected(row);
+                            setDetailOpen(true);
+                        }}
+                    >
+                        View
+                    </Button>
+                ) : (
+                    <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            restoreInvoice(row.id);
+                        }}
+                    >
+                        Restore
+                    </Button>
+                )
             ),
         },
     ];
@@ -228,7 +296,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
                 />
             </div>
 
-            {pendingBankTransfers.length > 0 && (
+            {viewMode === 'active' && pendingBankTransfers.length > 0 && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                     <p className="mb-2 text-sm font-semibold text-amber-700">
                         {pendingBankTransfers.length} Bank Transfer{pendingBankTransfers.length !== 1 ? 's' : ''} Awaiting Confirmation
@@ -262,9 +330,25 @@ export default function BillingPage({ openAddSignal = 0 }) {
 
             <Card>
                 <Card.Header
-                    title="Invoices"
+                    title={viewMode === 'active' ? 'Invoices' : 'Archived Invoices'}
                     action={
                         <div className="flex items-center gap-2">
+                            <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                                {['active', 'archived'].map((tab) => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setViewMode(tab)}
+                                        className={[
+                                            'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                            viewMode === tab
+                                                ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                                : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                                        ].join(' ')}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
                             <Input
                                 placeholder="Search tenant or invoice..."
                                 value={search}
@@ -281,13 +365,15 @@ export default function BillingPage({ openAddSignal = 0 }) {
                                 <option value="due">Due</option>
                                 <option value="overdue">Overdue</option>
                             </Select>
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => setAddOpen(true)}
-                            >
-                                + New Invoice
-                            </Button>
+                            {viewMode === 'active' && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => setAddOpen(true)}
+                                >
+                                    + New Invoice
+                                </Button>
+                            )}
                         </div>
                     }
                 />
@@ -303,7 +389,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
                     }}
                 />
                 <Card.Footer>
-                    Showing {filtered.length} of {invoices.length} invoices
+                    Showing {filtered.length} of {visibleInvoices.length} invoices
                 </Card.Footer>
             </Card>
 
@@ -321,17 +407,48 @@ export default function BillingPage({ openAddSignal = 0 }) {
                             >
                                 Close
                             </Button>
-                            {selected.method === 'Bank Transfer' && selected.status !== 'paid' && selected.reference && (
+                            {viewMode === 'active' ? (
+                                <>
+                                    {selected.method === 'Bank Transfer' &&
+                                        selected.status !== 'paid' &&
+                                        selected.reference && (
+                                            <Button
+                                                variant="primary"
+                                                onClick={confirmBankTransfer}
+                                            >
+                                                Confirm Bank Transfer
+                                            </Button>
+                                        )}
+                                    {selected.status === 'due' && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={markAsOverdue}
+                                        >
+                                            Mark as Overdue
+                                        </Button>
+                                    )}
+                                    {selected.status !== 'paid' &&
+                                        selected.method !== 'Bank Transfer' && (
+                                            <Button
+                                                variant="primary"
+                                                onClick={markAsPaid}
+                                            >
+                                                Mark as Paid
+                                            </Button>
+                                        )}
+                                    <Button
+                                        variant="danger"
+                                        onClick={archiveInvoice}
+                                    >
+                                        Archive Invoice
+                                    </Button>
+                                </>
+                            ) : (
                                 <Button
                                     variant="primary"
-                                    onClick={confirmBankTransfer}
+                                    onClick={() => restoreInvoice(selected.id)}
                                 >
-                                    Confirm Bank Transfer
-                                </Button>
-                            )}
-                            {selected.status !== 'paid' && selected.method !== 'Bank Transfer' && (
-                                <Button variant="primary" onClick={markAsPaid}>
-                                    Mark as Paid
+                                    Restore Invoice
                                 </Button>
                             )}
                         </>
@@ -509,7 +626,6 @@ export default function BillingPage({ openAddSignal = 0 }) {
                         full
                     >
                         <option value="GCash">GCash</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
                         <option value="Cash">Cash</option>
                     </Select>
                 </div>

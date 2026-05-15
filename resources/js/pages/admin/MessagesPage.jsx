@@ -21,7 +21,7 @@ export default function MessagesPage({ messages = [] }) {
                 map.set(message.tenant_id, {
                     tenantId: message.tenant_id,
                     tenantName:
-                        message.tenant?.name ?? `Tenant #${message.tenant_id}`,
+                        message.tenant?.name ?? 'Unknown Tenant',
                     unit: message.tenant?.unit ?? '-',
                     unread: unreadDelta,
                     lastAt: createdAt,

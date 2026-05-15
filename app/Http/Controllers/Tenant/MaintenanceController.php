@@ -21,6 +21,10 @@ class MaintenanceController extends Controller
             'maintenance' => MaintenanceRequest::where('tenant_id', $tenantId)
                 ->latest()
                 ->get(),
+            'archivedMaintenance' => MaintenanceRequest::onlyTrashed()
+                ->where('tenant_id', $tenantId)
+                ->latest('deleted_at')
+                ->get(),
         ]);
     }
 
@@ -56,5 +60,30 @@ class MaintenanceController extends Controller
         ]);
 
         return redirect()->route('tenant.maintenance')->with('success', 'Maintenance request submitted.');
+    }
+
+    public function destroy(MaintenanceRequest $maintenance): RedirectResponse
+    {
+        abort_unless($maintenance->tenant_id === auth()->user()->tenant_id, 403);
+
+        $maintenance->delete();
+
+        return redirect()->route('tenant.maintenance')->with('success', 'Maintenance request archived.');
+    }
+
+    public function restore(int $maintenanceId): RedirectResponse
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $maintenance = MaintenanceRequest::withTrashed()
+            ->where('tenant_id', $tenantId)
+            ->findOrFail($maintenanceId);
+
+        if (! $maintenance->trashed()) {
+            return redirect()->route('tenant.maintenance')->with('success', 'Maintenance request is already active.');
+        }
+
+        $maintenance->restore();
+
+        return redirect()->route('tenant.maintenance')->with('success', 'Maintenance request restored.');
     }
 }

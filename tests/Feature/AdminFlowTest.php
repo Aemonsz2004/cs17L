@@ -213,6 +213,7 @@ it('runs full admin maintenance flow', function () {
     $this->actingAs($admin)
         ->patch(route('admin.maintenance.update', $request), [
             'status' => 'resolved',
+            'resolved_date' => now()->toDateString(),
             'assigned_to' => 'Tech A',
             'notes' => 'Resolved quickly',
         ])
@@ -224,7 +225,7 @@ it('runs full admin maintenance flow', function () {
         ->delete(route('admin.maintenance.destroy', $request))
         ->assertRedirect(route('admin.maintenance.index'));
 
-    expect(MaintenanceRequest::find($request->id))->toBeNull();
+    expect(MaintenanceRequest::withTrashed()->find($request->id)?->deleted_at)->not->toBeNull();
 });
 
 it('runs admin notifications read operations', function () {

@@ -65,12 +65,17 @@ export default function App({ initialPage = 'dashboard' }) {
     const page = initialPage;
     const {
         notifications: propNotifications,
+        archivedNotifications: propArchivedNotifications,
         messages: propMessages,
         applications: propApplications,
+        archivedApplications: propArchivedApplications,
         unread_count,
     } =
         usePage().props;
     const [notifications, setNotifications] = useState(propNotifications ?? []);
+    const [archivedNotifications, setArchivedNotifications] = useState(
+        propArchivedNotifications ?? [],
+    );
     const unreadCount = propNotifications
         ? notifications.filter((n) => n.unread).length
         : unread_count ?? 0;
@@ -106,7 +111,12 @@ export default function App({ initialPage = 'dashboard' }) {
             case 'billing':
                 return <BillingPage openAddSignal={0} />;
             case 'applications':
-                return <ApplicationsPage applications={propApplications ?? []} />;
+                return (
+                    <ApplicationsPage
+                        applications={propApplications ?? []}
+                        archivedApplications={propArchivedApplications ?? []}
+                    />
+                );
             case 'maintenance':
                 return <MaintenancePage openAddSignal={0} />;
             case 'messages':
@@ -115,7 +125,9 @@ export default function App({ initialPage = 'dashboard' }) {
                 return (
                     <NotificationsPage
                         notifications={notifications}
+                        archivedNotifications={archivedNotifications}
                         onChangeNotifications={setNotifications}
+                        onChangeArchived={setArchivedNotifications}
                         onNavigate={(next) => navigate(next)}
                     />
                 );

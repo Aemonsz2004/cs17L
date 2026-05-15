@@ -7,6 +7,7 @@ use App\Models\Tenant;
 use App\Models\Unit;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -17,7 +18,11 @@ class UnitController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'units',
-            'units' => Unit::with('tenant')->latest()->get(),
+            'units' => Unit::with(['tenant' => fn ($query) => $query->withTrashed()])->latest()->get(),
+            'archivedUnits' => Unit::onlyTrashed()
+                ->with(['tenant' => fn ($query) => $query->withTrashed()])
+                ->latest('deleted_at')
+                ->get(),
             'tenants' => Tenant::latest()->get(),
         ]);
     }
@@ -36,7 +41,17 @@ class UnitController extends Controller
             'base_rent' => ['required', 'integer', 'min:0'],
             'status' => ['nullable', 'in:occupied,vacant,reserved,expiring,overdue'],
             'tenant_id' => ['nullable', 'exists:tenants,id'],
+            'description' => ['nullable', 'string', 'max:1000'],
+            'gallery' => ['nullable', 'array'],
+            'gallery.*' => ['file', 'image', 'max:5120'],
         ]);
+
+        if ($request->hasFile('gallery')) {
+            $data['gallery'] = collect($request->file('gallery'))
+                ->map(fn ($file) => Storage::url($file->store('units/gallery', 'public')))
+                ->values()
+                ->all();
+        }
 
         $data['status'] = $data['status'] ?? 'vacant';
 
@@ -61,7 +76,17 @@ class UnitController extends Controller
             'base_rent' => ['sometimes', 'integer', 'min:0'],
             'status' => ['sometimes', 'in:occupied,vacant,reserved,expiring,overdue'],
             'tenant_id' => ['nullable', 'exists:tenants,id'],
+            'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
+            'gallery' => ['sometimes', 'nullable', 'array'],
+            'gallery.*' => ['file', 'image', 'max:5120'],
         ]);
+
+        if ($request->hasFile('gallery')) {
+            $data['gallery'] = collect($request->file('gallery'))
+                ->map(fn ($file) => Storage::url($file->store('units/gallery', 'public')))
+                ->values()
+                ->all();
+        }
 
         $unit->update($data);
 
@@ -76,6 +101,19 @@ class UnitController extends Controller
 
         $unit->delete();
 
-        return redirect()->route('admin.units.index')->with('success', 'Unit deleted.');
+        return redirect()->route('admin.units.index')->with('success', 'Unit archived.');
+    }
+
+    public function restore(int $unitId): RedirectResponse
+    {
+        $unit = Unit::withTrashed()->findOrFail($unitId);
+
+        if (! $unit->trashed()) {
+            return redirect()->route('admin.units.index')->with('success', 'Unit is already active.');
+        }
+
+        $unit->restore();
+
+        return redirect()->route('admin.units.index')->with('success', 'Unit restored.');
     }
 }

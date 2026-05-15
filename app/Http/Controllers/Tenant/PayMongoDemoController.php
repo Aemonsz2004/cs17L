@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class PayMongoDemoController extends Controller
 {
@@ -24,6 +26,8 @@ class PayMongoDemoController extends Controller
             ->where('tenant_id', $this->tenantUser(Auth::user())->tenant_id)
             ->whereIn('status', ['due', 'overdue'])
             ->firstOrFail();
+
+        $this->assertInvoiceMatchesUnit($invoice);
 
         $intentId = 'pi_demo_' . Str::lower(Str::random(16));
 
@@ -124,5 +128,31 @@ class PayMongoDemoController extends Controller
         abort_unless($user instanceof User && $user->isTenant(), 403);
 
         return $user;
+    }
+
+    private function assertInvoiceMatchesUnit(Invoice $invoice): void
+    {
+        $expectedTotal = (int) $invoice->rent + (int) $invoice->utilities + (int) $invoice->penalty;
+
+        if ((int) $invoice->total !== $expectedTotal) {
+            throw ValidationException::withMessages([
+                'invoice_id' => 'Invoice total mismatch. Please contact admin.',
+            ]);
+        }
+
+        $invoice->loadMissing('tenant');
+        $unitNumber = $invoice->tenant?->unit;
+
+        if (! $unitNumber) {
+            return;
+        }
+
+        $baseRent = Unit::where('number', $unitNumber)->value('base_rent');
+
+        if ($baseRent !== null && (int) $invoice->rent !== (int) $baseRent) {
+            throw ValidationException::withMessages([
+                'invoice_id' => 'Rent amount does not match the unit rent. Please contact admin.',
+            ]);
+        }
     }
 }

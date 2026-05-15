@@ -31,7 +31,11 @@ const statusColor = {
     vacant: 'bg-[#FAF8F4] border border-dashed border-[#1B2B4B]/20 text-[#5C6B88]',
 };
 export default function UnitsPage({ openAddSignal = 0 }) {
-    const { units: unitRows, tenants: tenantRows } = usePage().props;
+    const {
+        units: unitRows,
+        archivedUnits: archivedUnitRows,
+        tenants: tenantRows,
+    } = usePage().props;
     const mappedUnits = (unitRows ?? []).map((unit) => ({
         id: unit.id,
         number: unit.number,
@@ -42,8 +46,25 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         status: unit.status,
         tenantName: unit.tenant?.name ?? null,
         tenantId: unit.tenant_id,
+        description: unit.description ?? '',
+        gallery: unit.gallery ?? [],
+    }));
+    const mappedArchivedUnits = (archivedUnitRows ?? []).map((unit) => ({
+        id: unit.id,
+        number: unit.number,
+        floor: unit.floor,
+        type: unit.type,
+        area: unit.area,
+        baseRent: unit.base_rent,
+        status: unit.status,
+        tenantName: unit.tenant?.name ?? null,
+        tenantId: unit.tenant_id,
+        description: unit.description ?? '',
+        gallery: unit.gallery ?? [],
     }));
     const [units, setUnits] = useState(mappedUnits);
+    const [archivedUnits, setArchivedUnits] = useState(mappedArchivedUnits);
+    const [viewMode, setViewMode] = useState('active');
     const [view, setView] = useState('grid');
     const [floor, setFloor] = useState('All');
     const [search, setSearch] = useState('');
@@ -58,8 +79,12 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         area: '',
         baseRent: '',
         status: 'vacant',
+        description: '',
+        galleryFiles: [],
     });
-    const [editForm, setEditForm] = useState({});
+    const [addErrors, setAddErrors] = useState({});
+    const [editForm, setEditForm] = useState({ galleryFiles: [] });
+    const [editErrors, setEditErrors] = useState({});
     const lastHandledSignal = useRef(openAddSignal);
     useEffect(() => {
         setUnits(mappedUnits);
@@ -68,8 +93,22 @@ export default function UnitsPage({ openAddSignal = 0 }) {
             lastHandledSignal.current = openAddSignal;
         }
     }, [openAddSignal, unitRows]);
+    useEffect(() => {
+        setArchivedUnits(mappedArchivedUnits);
+    }, [archivedUnitRows]);
+    useEffect(() => {
+        if (viewMode === 'archived' && view === 'grid') {
+            setView('table');
+        }
+        if (viewMode !== 'active') {
+            setDetailOpen(false);
+            setEditOpen(false);
+            setSelected(null);
+        }
+    }, [viewMode, view]);
+    const visibleUnits = viewMode === 'active' ? units : archivedUnits;
     const filtered = useMemo(() => {
-        return units.filter((u) => {
+        return visibleUnits.filter((u) => {
             const floorMatch = floor === 'All' || u.floor === floor;
             const searchTerm = search.toLowerCase();
             const searchMatch =
@@ -78,7 +117,7 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                 (u.tenantName ?? '').toLowerCase().includes(searchTerm);
             return floorMatch && searchMatch;
         });
-    }, [units, floor, search]);
+    }, [visibleUnits, floor, search]);
     const occupied = units.filter((u) => u.status !== 'vacant').length;
     const vacant = units.filter((u) => u.status === 'vacant').length;
     const expiring = units.filter((u) => u.status === 'expiring').length;
@@ -87,6 +126,12 @@ export default function UnitsPage({ openAddSignal = 0 }) {
     const tenant = selected?.tenantId
         ? (tenantRows ?? []).find((t) => t.id === selected.tenantId)
         : null;
+    const restoreUnit = (unitId) => {
+        if (!window.confirm('Restore this unit?')) {
+            return;
+        }
+        router.post(`/admin/units/${unitId}/restore`);
+    };
     const tableColumns = [
         { key: 'number', label: 'Unit', width: 80 },
         { key: 'floor', label: 'Floor', width: 80 },
@@ -122,73 +167,136 @@ export default function UnitsPage({ openAddSignal = 0 }) {
             width: 80,
             align: 'right',
             render: (_, row) => (
-                <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setSelected(row);
-                        setDetailOpen(true);
-                    }}
-                >
-                    View
-                </Button>
+                viewMode === 'active' ? (
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setSelected(row);
+                            setDetailOpen(true);
+                        }}
+                    >
+                        View
+                    </Button>
+                ) : (
+                    <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            restoreUnit(row.id);
+                        }}
+                    >
+                        Restore
+                    </Button>
+                )
             ),
         },
     ];
     const saveNewUnit = () => {
+        const errors = {};
         const normalizedNumber = addForm.number.trim().toUpperCase();
-        if (!normalizedNumber || !addForm.area || !addForm.baseRent) {
-            return;
-        }
-        if (
+
+        if (!normalizedNumber) {
+            errors.number = 'Unit number is required.';
+        } else if (
             units.some(
                 (unit) => unit.number.trim().toUpperCase() === normalizedNumber,
             )
         ) {
-            window.alert('Unit number already exists.');
+            errors.number = 'Unit number already exists.';
+        }
+
+        if (!addForm.area || Number(addForm.area) <= 0) {
+            errors.area = 'Area must be greater than 0.';
+        }
+
+        if (!addForm.baseRent || Number(addForm.baseRent) < 0) {
+            errors.baseRent = 'Base rent is required.';
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setAddErrors(errors);
             return;
         }
-        if (!window.confirm('Add this new unit?')) {
-            return;
-        }
-        router.post('/admin/units', {
-            number: normalizedNumber,
-            floor: addForm.floor,
-            type: addForm.type,
-            area: Number(addForm.area),
-            base_rent: Number(addForm.baseRent),
-            status: addForm.status,
-            tenant_id: null,
+
+        const formData = new FormData();
+        formData.append('number', normalizedNumber);
+        formData.append('floor', addForm.floor);
+        formData.append('type', addForm.type);
+        formData.append('area', Number(addForm.area));
+        formData.append('base_rent', Number(addForm.baseRent));
+        formData.append('status', addForm.status);
+        formData.append('description', addForm.description);
+
+        (addForm.galleryFiles ?? []).forEach((file) => {
+            formData.append('gallery[]', file);
+        });
+
+        router.post('/admin/units', formData, {
+            forceFormData: true,
+            onSuccess: () => {
+                setAddForm({
+                    number: '',
+                    floor: '1F',
+                    type: 'Office',
+                    area: '',
+                    baseRent: '',
+                    status: 'vacant',
+                    description: '',
+                    galleryFiles: [],
+                });
+                setAddErrors({});
+                setAddOpen(false);
+            },
+            onError: (errors) => {
+                setAddErrors(errors || {});
+            },
         });
     };
     const startEdit = () => {
         if (!selected) return;
-        setEditForm(selected);
+        setEditForm({
+            ...selected,
+            galleryFiles: [],
+        });
         setEditOpen(true);
     };
     const saveEdit = () => {
         if (!selected) return;
+        const errors = {};
         const normalizedNumber = String(editForm.number ?? '')
             .trim()
             .toUpperCase();
+
         if (!normalizedNumber) {
-            return;
-        }
-        if (
+            errors.number = 'Unit number is required.';
+        } else if (
             units.some(
                 (unit) =>
                     unit.id !== selected.id &&
                     unit.number.trim().toUpperCase() === normalizedNumber,
             )
         ) {
-            window.alert('Unit number already exists.');
+            errors.number = 'Unit number already exists.';
+        }
+
+        if (!editForm.area || Number(editForm.area) <= 0) {
+            errors.area = 'Area must be greater than 0.';
+        }
+
+        if (!editForm.baseRent || Number(editForm.baseRent) < 0) {
+            errors.baseRent = 'Base rent is required.';
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setEditErrors(errors);
             return;
         }
-        if (!window.confirm('Save changes to this unit?')) {
-            return;
-        }
-        router.patch(`/admin/units/${selected.id}`, {
+
+        const hasNewFiles = (editForm.galleryFiles ?? []).length > 0;
+        const payload = {
             number: normalizedNumber,
             floor: editForm.floor,
             area: editForm.area,
@@ -196,6 +304,41 @@ export default function UnitsPage({ openAddSignal = 0 }) {
             status: editForm.status,
             type: editForm.type,
             tenant_id: editForm.tenantId,
+            description: editForm.description,
+        };
+
+        if (!hasNewFiles) {
+            router.patch(`/admin/units/${selected.id}`, payload, {
+                onSuccess: () => {
+                    setEditErrors({});
+                    setEditOpen(false);
+                },
+                onError: (errors) => {
+                    setEditErrors(errors || {});
+                },
+            });
+            return;
+        }
+
+        const formData = new FormData();
+        Object.entries(payload).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+                formData.append(key, value);
+            }
+        });
+        (editForm.galleryFiles ?? []).forEach((file) => {
+            formData.append('gallery[]', file);
+        });
+
+        router.patch(`/admin/units/${selected.id}`, formData, {
+            forceFormData: true,
+            onSuccess: () => {
+                setEditErrors({});
+                setEditOpen(false);
+            },
+            onError: (errors) => {
+                setEditErrors(errors || {});
+            },
         });
     };
     const deleteUnit = () => {
@@ -204,7 +347,7 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         }
         if (
             !window.confirm(
-                `Delete unit ${selected.number}? This cannot be undone.`,
+                `Archive unit ${selected.number}? You can restore it later.`,
             )
         ) {
             return;
@@ -252,6 +395,22 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                     title="Unit Overview"
                     action={
                         <div className="flex items-center gap-2">
+                            <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                                {['active', 'archived'].map((tab) => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setViewMode(tab)}
+                                        className={[
+                                            'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                            viewMode === tab
+                                                ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                                : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                                        ].join(' ')}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
                             <Input
                                 placeholder="Search unit, type, tenant..."
                                 value={search}
@@ -290,18 +449,20 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                                     </button>
                                 ))}
                             </div>
-                            <Button
-                                variant="primary"
-                                size="sm"
-                                onClick={() => setAddOpen(true)}
-                            >
-                                + Add Unit
-                            </Button>
+                            {viewMode === 'active' && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => setAddOpen(true)}
+                                >
+                                    + Add Unit
+                                </Button>
+                            )}
                         </div>
                     }
                 />
 
-                {view === 'grid' ? (
+                {viewMode === 'active' && view === 'grid' ? (
                     <Card.Body>
                         {(floor === 'All'
                             ? ['GF', '1F', '2F', '3F']
@@ -352,6 +513,9 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                             data={filtered}
                             keyField={'id'}
                             onRowClick={(row) => {
+                                if (viewMode !== 'active') {
+                                    return;
+                                }
                                 setSelected(row);
                                 setDetailOpen(true);
                             }}
@@ -370,18 +534,27 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                     title={`Unit ${selected.number}`}
                     size="md"
                     footer={
-                        <>
-                            <Button variant="danger" onClick={deleteUnit}>
-                                Delete Unit
-                            </Button>
+                        viewMode === 'active' ? (
+                            <>
+                                <Button variant="danger" onClick={deleteUnit}>
+                                                            Archive Unit
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="ml-2"
+                                    onClick={startEdit}
+                                >
+                                    Edit Unit
+                                </Button>
+                            </>
+                        ) : (
                             <Button
-                                variant="outline"
-                                className="ml-2"
-                                onClick={startEdit}
+                                variant="primary"
+                                onClick={() => restoreUnit(selected.id)}
                             >
-                                Edit Unit
+                                Restore Unit
                             </Button>
-                        </>
+                        )
                     }
                 >
                     <div className="mb-4 flex items-center gap-3 border-b border-[#1B2B4B]/8 pb-4">
@@ -406,6 +579,25 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                     <InfoRow label="Floor" value={floorLabel[selected.floor]} />
                     <InfoRow label="Unit Type" value={selected.type} />
                     <InfoRow label="Area" value={`${selected.area} sqm`} />
+
+                    {selected.description && (
+                        <div className="mt-4 rounded-2xl bg-[#FAF8F4] p-4 text-sm text-[#42506b]">
+                            {selected.description}
+                        </div>
+                    )}
+
+                    {selected.gallery?.length > 0 && (
+                        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                            {selected.gallery.slice(0, 3).map((photo, index) => (
+                                <img
+                                    key={`${photo}-${index}`}
+                                    src={photo}
+                                    alt={`Unit ${selected.number} image ${index + 1}`}
+                                    className="h-24 w-full rounded-xl object-cover"
+                                />
+                            ))}
+                        </div>
+                    )}
 
                     {tenant ? (
                         <>
@@ -447,7 +639,7 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                             variant="ghost"
                             onClick={() => setAddOpen(false)}
                         >
-                            Close
+                            Cancel
                         </Button>
                         <Button variant="primary" onClick={saveNewUnit}>
                             Save Unit
@@ -456,17 +648,30 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                 }
             >
                 <div className="grid grid-cols-2 gap-4">
-                    <Input
-                        label="Unit Number"
-                        value={addForm.number}
-                        onChange={(e) =>
-                            setAddForm((f) => ({
-                                ...f,
-                                number: e.target.value,
-                            }))
-                        }
-                        full
-                    />
+                    <div className="col-span-1">
+                        <Input
+                            label="Unit Number *"
+                            value={addForm.number}
+                            onChange={(e) => {
+                                setAddForm((f) => ({
+                                    ...f,
+                                    number: e.target.value,
+                                }));
+                                if (addErrors.number) {
+                                    setAddErrors((e) => ({
+                                        ...e,
+                                        number: undefined,
+                                    }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.number && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.number}
+                            </p>
+                        )}
+                    </div>
                     <Select
                         label="Floor"
                         value={addForm.floor}
@@ -508,27 +713,101 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                         <option value="expiring">Expiring</option>
                         <option value="overdue">Overdue</option>
                     </Select>
-                    <Input
-                        label="Area (sqm)"
-                        type="number"
-                        value={addForm.area}
-                        onChange={(e) =>
-                            setAddForm((f) => ({ ...f, area: e.target.value }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Base Rent"
-                        type="number"
-                        value={addForm.baseRent}
-                        onChange={(e) =>
-                            setAddForm((f) => ({
-                                ...f,
-                                baseRent: e.target.value,
-                            }))
-                        }
-                        full
-                    />
+                    <div className="col-span-1">
+                        <Input
+                            label="Area (sqm) *"
+                            type="number"
+                            value={addForm.area}
+                            onChange={(e) => {
+                                setAddForm((f) => ({
+                                    ...f,
+                                    area: e.target.value,
+                                }));
+                                if (addErrors.area) {
+                                    setAddErrors((e) => ({
+                                        ...e,
+                                        area: undefined,
+                                    }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.area && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.area}
+                            </p>
+                        )}
+                    </div>
+                    <div className="col-span-1">
+                        <Input
+                            label="Base Rent *"
+                            type="number"
+                            value={addForm.baseRent}
+                            onChange={(e) => {
+                                setAddForm((f) => ({
+                                    ...f,
+                                    baseRent: e.target.value,
+                                }));
+                                if (addErrors.baseRent) {
+                                    setAddErrors((e) => ({
+                                        ...e,
+                                        baseRent: undefined,
+                                    }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.baseRent && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.baseRent}
+                            </p>
+                        )}
+                    </div>
+                    <div className="col-span-2">
+                        <label className="mb-2 block text-sm font-medium text-[#1B2B4B]">
+                            Description
+                        </label>
+                        <textarea
+                            rows={4}
+                            value={addForm.description}
+                            onChange={(e) =>
+                                setAddForm((f) => ({
+                                    ...f,
+                                    description: e.target.value,
+                                }))
+                            }
+                            className="w-full rounded-xl border border-[#D3D8E0] bg-white px-3 py-2 text-sm text-[#1B2B4B] outline-none focus:border-[#1d7b6e]"
+                        />
+                    </div>
+                    <div className="col-span-2">
+                        <label className="mb-2 block text-sm font-medium text-[#1B2B4B]">
+                            Upload Images
+                        </label>
+                        <Input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={(e) =>
+                                setAddForm((f) => ({
+                                    ...f,
+                                    galleryFiles: Array.from(e.target.files ?? []),
+                                }))
+                            }
+                            full
+                        />
+                        {(addForm.galleryFiles ?? []).length > 0 && (
+                            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                                {addForm.galleryFiles.map((file, index) => (
+                                    <img
+                                        key={`${file.name}-${index}`}
+                                        src={URL.createObjectURL(file)}
+                                        alt={`Preview ${index + 1}`}
+                                        className="h-24 w-full rounded-xl object-cover"
+                                    />
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </Modal>
 
@@ -541,7 +820,7 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                     footer={
                         <>
                             <Button variant="danger" onClick={deleteUnit}>
-                                Delete Unit
+                                Archive Unit
                             </Button>
                             <Button
                                 variant="primary"
@@ -554,17 +833,30 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                     }
                 >
                     <div className="grid grid-cols-2 gap-4">
-                        <Input
-                            label="Unit Number"
-                            value={String(editForm.number ?? '')}
-                            onChange={(e) =>
-                                setEditForm((f) => ({
-                                    ...f,
-                                    number: e.target.value,
-                                }))
-                            }
-                            full
-                        />
+                        <div className="col-span-1">
+                            <Input
+                                label="Unit Number *"
+                                value={String(editForm.number ?? '')}
+                                onChange={(e) => {
+                                    setEditForm((f) => ({
+                                        ...f,
+                                        number: e.target.value,
+                                    }));
+                                    if (editErrors.number) {
+                                        setEditErrors((e) => ({
+                                            ...e,
+                                            number: undefined,
+                                        }));
+                                    }
+                                }}
+                                full
+                            />
+                            {editErrors.number && (
+                                <p className="mt-1 text-xs text-red-600">
+                                    {editErrors.number}
+                                </p>
+                            )}
+                        </div>
                         <Select
                             label="Floor"
                             value={String(editForm.floor ?? '1F')}
@@ -581,30 +873,106 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                             <option value="2F">2F</option>
                             <option value="3F">3F</option>
                         </Select>
-                        <Input
-                            label="Area (sqm)"
-                            type="number"
-                            value={String(editForm.area ?? '')}
-                            onChange={(e) =>
-                                setEditForm((f) => ({
-                                    ...f,
-                                    area: Number(e.target.value),
-                                }))
-                            }
-                            full
-                        />
-                        <Input
-                            label="Base Rent"
-                            type="number"
-                            value={String(editForm.baseRent ?? '')}
-                            onChange={(e) =>
-                                setEditForm((f) => ({
-                                    ...f,
-                                    baseRent: Number(e.target.value),
-                                }))
-                            }
-                            full
-                        />
+                        <div className="col-span-1">
+                            <Input
+                                label="Area (sqm) *"
+                                type="number"
+                                value={String(editForm.area ?? '')}
+                                onChange={(e) => {
+                                    setEditForm((f) => ({
+                                        ...f,
+                                        area: Number(e.target.value),
+                                    }));
+                                    if (editErrors.area) {
+                                        setEditErrors((e) => ({
+                                            ...e,
+                                            area: undefined,
+                                        }));
+                                    }
+                                }}
+                                full
+                            />
+                            {editErrors.area && (
+                                <p className="mt-1 text-xs text-red-600">
+                                    {editErrors.area}
+                                </p>
+                            )}
+                        </div>
+                        <div className="col-span-1">
+                            <Input
+                                label="Base Rent *"
+                                type="number"
+                                value={String(editForm.baseRent ?? '')}
+                                onChange={(e) => {
+                                    setEditForm((f) => ({
+                                        ...f,
+                                        baseRent: Number(e.target.value),
+                                    }));
+                                    if (editErrors.baseRent) {
+                                        setEditErrors((e) => ({
+                                            ...e,
+                                            baseRent: undefined,
+                                        }));
+                                    }
+                                }}
+                                full
+                            />
+                            {editErrors.baseRent && (
+                                <p className="mt-1 text-xs text-red-600">
+                                    {editErrors.baseRent}
+                                </p>
+                            )}
+                        </div>
+                        <div className="col-span-2">
+                            <label className="mb-2 block text-sm font-medium text-[#1B2B4B]">
+                                Description
+                            </label>
+                            <textarea
+                                rows={4}
+                                value={String(editForm.description ?? '')}
+                                onChange={(e) =>
+                                    setEditForm((f) => ({
+                                        ...f,
+                                        description: e.target.value,
+                                    }))
+                                }
+                                className="w-full rounded-xl border border-[#D3D8E0] bg-white px-3 py-2 text-sm text-[#1B2B4B] outline-none focus:border-[#1d7b6e]"
+                            />
+                        </div>
+                        <div className="col-span-2">
+                            <label className="mb-2 block text-sm font-medium text-[#1B2B4B]">
+                                Upload Replacement Images
+                            </label>
+                            <Input
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                onChange={(e) =>
+                                    setEditForm((f) => ({
+                                        ...f,
+                                        galleryFiles: Array.from(e.target.files ?? []),
+                                    }))
+                                }
+                                full
+                            />
+                            {(editForm.galleryFiles ?? []).length > 0 && (
+                                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                                    {editForm.galleryFiles.map((file, index) => (
+                                        <img
+                                            key={`${file.name}-${index}`}
+                                            src={URL.createObjectURL(file)}
+                                            alt={`Preview ${index + 1}`}
+                                            className="h-24 w-full rounded-xl object-cover"
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                            {selected.gallery?.length > 0 && (
+                                <div className="mt-4 rounded-2xl bg-[#F5F0E8] p-3 text-sm text-[#5C6B88]">
+                                    Current images will remain unless new files are uploaded.
+                                </div>
+                            )}
+                        </div>
                         <Select
                             label="Status"
                             value={String(editForm.status ?? 'vacant')}

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceRequest;
+use App\Support\TenantNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,7 +16,13 @@ class MaintenanceController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'maintenance',
-            'maintenance' => MaintenanceRequest::with('tenantRecord')->latest()->get(),
+            'maintenance' => MaintenanceRequest::with([
+                'tenantRecord' => fn ($query) => $query->withTrashed(),
+            ])->latest()->get(),
+            'archivedMaintenance' => MaintenanceRequest::onlyTrashed()
+                ->with(['tenantRecord' => fn ($query) => $query->withTrashed()])
+                ->latest('deleted_at')
+                ->get(),
         ]);
     }
 
@@ -57,7 +64,22 @@ class MaintenanceController extends Controller
             'notes' => ['sometimes', 'string'],
         ]);
 
+        if (($data['status'] ?? null) === 'resolved' && empty($data['resolved_date'])) {
+            return redirect()->back()->withErrors([
+                'resolved_date' => 'Resolved date is required when marking a request as resolved.',
+            ]);
+        }
+
+        $previousStatus = $maintenance->status;
         $maintenance->update($data);
+
+        if (($data['status'] ?? null) === 'inprogress' && $previousStatus !== 'inprogress') {
+            TenantNotificationService::notifyMaintenanceInProgress($maintenance->fresh());
+        }
+
+        if (($data['status'] ?? null) === 'resolved' && $previousStatus !== 'resolved') {
+            TenantNotificationService::notifyMaintenanceResolved($maintenance->fresh());
+        }
 
         return redirect()->route('admin.maintenance.index')->with('success', 'Request updated.');
     }
@@ -66,6 +88,19 @@ class MaintenanceController extends Controller
     {
         $maintenance->delete();
 
-        return redirect()->route('admin.maintenance.index')->with('success', 'Request deleted.');
+        return redirect()->route('admin.maintenance.index')->with('success', 'Request archived.');
+    }
+
+    public function restore(int $maintenanceId): RedirectResponse
+    {
+        $maintenance = MaintenanceRequest::withTrashed()->findOrFail($maintenanceId);
+
+        if (! $maintenance->trashed()) {
+            return redirect()->route('admin.maintenance.index')->with('success', 'Request is already active.');
+        }
+
+        $maintenance->restore();
+
+        return redirect()->route('admin.maintenance.index')->with('success', 'Request restored.');
     }
 }

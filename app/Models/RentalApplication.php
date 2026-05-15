@@ -6,9 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class RentalApplication extends Model
 {
+    use SoftDeletes;
+
     public const STATUS_PENDING_REVIEW = 'pending_review';
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';

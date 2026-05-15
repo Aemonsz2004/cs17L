@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Lease;
 use App\Models\Tenant;
+use App\Models\Unit;
 use App\Support\TenantNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,13 @@ class BillingController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'billing',
-            'invoices' => Invoice::latest()->get(),
+            'invoices' => Invoice::with([
+                'tenant' => fn ($query) => $query->withTrashed(),
+            ])->latest()->get(),
+            'archivedInvoices' => Invoice::onlyTrashed()
+                ->with(['tenant' => fn ($query) => $query->withTrashed()])
+                ->latest('deleted_at')
+                ->get(),
             'tenants' => Tenant::latest()->get(),
         ]);
     }
@@ -40,7 +47,7 @@ class BillingController extends Controller
             'utilities' => ['nullable', 'integer', 'min:0'],
             'penalty' => ['nullable', 'integer', 'min:0'],
             'due_date' => ['required', 'date'],
-            'method' => ['nullable', 'in:GCash,Bank Transfer,Cash'],
+            'method' => ['nullable', 'in:GCash,Cash'],
             'status' => ['nullable', 'in:paid,due,overdue'],
         ]);
 
@@ -48,6 +55,14 @@ class BillingController extends Controller
         $data['penalty'] = $data['penalty'] ?? 0;
         $data['status'] = $data['status'] ?? 'due';
         $data['invoice_no'] = Invoice::nextInvoiceNo();
+        $tenant = Tenant::find($data['tenant_id']);
+        $unitRent = $tenant?->unit
+            ? Unit::where('number', $tenant->unit)->value('base_rent')
+            : null;
+
+        if ($unitRent !== null) {
+            $data['rent'] = (int) $unitRent;
+        }
         $data['total'] = $data['rent'] + $data['utilities'] + $data['penalty'];
         $data['paid_date'] = $data['status'] === 'paid' ? now()->toDateString() : null;
         $data['lease_id'] = Lease::where('tenant_id', $data['tenant_id'])
@@ -55,7 +70,8 @@ class BillingController extends Controller
             ->latest('id')
             ->value('id');
 
-        Invoice::create($data);
+        $invoice = Invoice::create($data);
+        TenantNotificationService::notifyInvoiceCreated($invoice);
 
         return redirect()->route('admin.billing.index')->with('success', 'Invoice created.');
     }
@@ -74,7 +90,15 @@ class BillingController extends Controller
 
     public function markOverdue(Invoice $invoice): RedirectResponse
     {
-        $invoice->update(['status' => 'overdue']);
+        if ($invoice->status === 'paid') {
+            return redirect()->route('admin.billing.index')
+                ->with('error', 'Action not allowed: paid invoices cannot be marked overdue.');
+        }
+
+        if ($invoice->status !== 'overdue') {
+            $invoice->update(['status' => 'overdue']);
+            TenantNotificationService::notifyInvoiceOverdue($invoice->fresh());
+        }
 
         return redirect()->route('admin.billing.index')->with('success', 'Invoice marked overdue.');
     }
@@ -94,5 +118,25 @@ class BillingController extends Controller
 
         return redirect()->route('admin.billing.index')
             ->with('success', sprintf('Bank Transfer confirmed for Invoice %s.', $invoice->invoice_no));
+    }
+
+    public function destroy(Invoice $invoice): RedirectResponse
+    {
+        $invoice->delete();
+
+        return redirect()->route('admin.billing.index')->with('success', 'Invoice archived.');
+    }
+
+    public function restore(int $invoiceId): RedirectResponse
+    {
+        $invoice = Invoice::withTrashed()->findOrFail($invoiceId);
+
+        if (! $invoice->trashed()) {
+            return redirect()->route('admin.billing.index')->with('success', 'Invoice is already active.');
+        }
+
+        $invoice->restore();
+
+        return redirect()->route('admin.billing.index')->with('success', 'Invoice restored.');
     }
 }

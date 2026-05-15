@@ -26,19 +26,20 @@ const typeIcon = {
     General: '🔨',
 };
 export default function TenantMaintenancePage({ maintenance }) {
-    const { auth } = usePage().props;
+    const { archivedMaintenance } = usePage().props;
     const [selected, setSelected] = useState(null);
     const [detailOpen, setDetailOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('all');
+    const [viewMode, setViewMode] = useState('active');
     const [form, setForm] = useState({
         title: '',
         type: 'General',
         priority: 'medium',
         notes: '',
     });
-    const requests = (maintenance ?? []).map((request) => ({
+    const activeRequests = (maintenance ?? []).map((request) => ({
         id: request.id,
         title: request.title,
         unit: request.unit,
@@ -53,6 +54,22 @@ export default function TenantMaintenancePage({ maintenance }) {
             : null,
         notes: request.notes,
     }));
+    const archivedRequests = (archivedMaintenance ?? []).map((request) => ({
+        id: request.id,
+        title: request.title,
+        unit: request.unit,
+        tenant: request.tenant,
+        type: request.type,
+        priority: request.priority,
+        status: request.status,
+        submitted: formatDateDisplay(request.created_at, '-'),
+        assignedTo: request.assigned_to ?? null,
+        resolvedDate: request.resolved_date
+            ? formatDateDisplay(request.resolved_date, '-')
+            : null,
+        notes: request.notes,
+    }));
+    const requests = viewMode === 'active' ? activeRequests : archivedRequests;
     const q = search.trim().toLowerCase();
     const filtered = requests.filter((request) => {
         const matchStatus = filter === 'all' || request.status === filter;
@@ -77,6 +94,9 @@ export default function TenantMaintenancePage({ maintenance }) {
     const inProgress = requests.filter((m) => m.status === 'inprogress').length;
     const resolved = requests.filter((m) => m.status === 'resolved').length;
     const submitRequest = () => {
+        if (viewMode !== 'active') {
+            return;
+        }
         if (!form.title.trim() || !form.notes.trim()) {
             return;
         }
@@ -87,8 +107,40 @@ export default function TenantMaintenancePage({ maintenance }) {
             notes: form.notes.trim(),
         });
     };
+    const archiveRequest = () => {
+        if (!selected) return;
+        if (!window.confirm('Archive this request?')) {
+            return;
+        }
+        router.delete(`/tenant/maintenance/${selected.id}`);
+    };
+    const restoreRequest = () => {
+        if (!selected) return;
+        if (!window.confirm('Restore this request?')) {
+            return;
+        }
+        router.post(`/tenant/maintenance/${selected.id}/restore`);
+    };
     return (
         <div className="max-w-4xl space-y-5">
+            <div className="flex items-center justify-end">
+                <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                    {['active', 'archived'].map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setViewMode(tab)}
+                            className={[
+                                'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                viewMode === tab
+                                    ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                    : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                            ].join(' ')}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
+            </div>
             {/* ── Summary ── */}
             <div className="grid grid-cols-3 gap-4">
                 {[
@@ -168,6 +220,7 @@ export default function TenantMaintenancePage({ maintenance }) {
                                 variant="primary"
                                 size="sm"
                                 onClick={() => setAddOpen(true)}
+                                disabled={viewMode !== 'active'}
                             >
                                 + New Request
                             </Button>
@@ -257,12 +310,29 @@ export default function TenantMaintenancePage({ maintenance }) {
                     title="Request Detail"
                     size="md"
                     footer={
-                        <Button
-                            variant="ghost"
-                            onClick={() => setDetailOpen(false)}
-                        >
-                            Close
-                        </Button>
+                        <div className="flex w-full items-center justify-between">
+                            <Button
+                                variant="ghost"
+                                onClick={() => setDetailOpen(false)}
+                            >
+                                Close
+                            </Button>
+                            {viewMode === 'active' ? (
+                                <Button
+                                    variant="danger"
+                                    onClick={archiveRequest}
+                                >
+                                    Archive
+                                </Button>
+                            ) : (
+                                <Button
+                                    variant="primary"
+                                    onClick={restoreRequest}
+                                >
+                                    Restore
+                                </Button>
+                            )}
+                        </div>
                     }
                 >
                     {/* Header */}

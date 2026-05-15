@@ -24,7 +24,10 @@ class TenantController extends Controller
             'tenants' => Tenant::with([
                 'leases' => fn ($query) => $query->orderByDesc('start_date')->orderByDesc('id'),
             ])->latest()->get(),
-            'invoices' => Invoice::latest()->get(),
+            'archivedTenants' => Tenant::onlyTrashed()->with([
+                'leases' => fn ($query) => $query->orderByDesc('start_date')->orderByDesc('id'),
+            ])->latest('deleted_at')->get(),
+            'invoices' => Invoice::withTrashed()->latest()->get(),
             'units' => Unit::orderBy('floor')->orderBy('number')->get(),
         ]);
     }
@@ -54,7 +57,7 @@ class TenantController extends Controller
             'deposit' => ['required', 'integer', 'min:0'],
             'lease_start' => ['required', 'date'],
             'lease_end' => ['required', 'date', 'after_or_equal:lease_start'],
-            'payment_method' => ['required', 'in:GCash,Bank Transfer,Cash'],
+            'payment_method' => ['required', 'in:GCash,Cash'],
             'status' => ['nullable', 'in:active,expiring,overdue'],
         ]);
 
@@ -134,7 +137,7 @@ class TenantController extends Controller
             'deposit' => ['sometimes', 'integer', 'min:0'],
             'lease_start' => ['sometimes', 'date'],
             'lease_end' => ['sometimes', 'date'],
-            'payment_method' => ['sometimes', 'in:GCash,Bank Transfer,Cash'],
+            'payment_method' => ['sometimes', 'in:GCash,Cash'],
             'status' => ['sometimes', 'in:active,expiring,overdue'],
         ]);
 
@@ -254,7 +257,7 @@ class TenantController extends Controller
             'lease_end' => ['required', 'date', 'after_or_equal:lease_start'],
             'rent' => ['required', 'integer', 'min:0'],
             'deposit' => ['required', 'integer', 'min:0'],
-            'payment_method' => ['required', 'in:GCash,Bank Transfer,Cash'],
+            'payment_method' => ['required', 'in:GCash,Cash'],
             'terms' => ['nullable', 'string'],
         ]);
 
@@ -362,7 +365,38 @@ class TenantController extends Controller
             $tenant->delete();
         });
 
-        return redirect()->route('admin.tenants.index')->with('success', 'Tenant deleted.');
+        return redirect()->route('admin.tenants.index')->with('success', 'Tenant archived.');
+    }
+
+    public function restore(int $tenantId): RedirectResponse
+    {
+        $tenant = Tenant::withTrashed()->findOrFail($tenantId);
+
+        if (! $tenant->trashed()) {
+            return redirect()->route('admin.tenants.index')->with('success', 'Tenant is already active.');
+        }
+
+        $unitReattached = false;
+
+        DB::transaction(function () use ($tenant, &$unitReattached): void {
+            $tenant->restore();
+
+            $unit = Unit::where('number', $tenant->unit)->lockForUpdate()->first();
+
+            if ($unit && $unit->tenant_id === null && $unit->status === 'vacant') {
+                $unit->update([
+                    'tenant_id' => $tenant->id,
+                    'status' => $tenant->status === 'active' ? 'occupied' : $tenant->status,
+                ]);
+                $unitReattached = true;
+            }
+        });
+
+        $message = $unitReattached
+            ? 'Tenant restored and unit reassigned.'
+            : 'Tenant restored. Unit is unavailable and was not reassigned.';
+
+        return redirect()->route('admin.tenants.index')->with('success', $message);
     }
 
     private function generateTemporaryPassword(int $length = 10): string

@@ -52,6 +52,7 @@ const methodBadge = (m) =>
 export default function TenantsPage({ openAddSignal = 0 }) {
     const {
         tenants: tenantRows,
+        archivedTenants: archivedTenantRows,
         invoices: invoiceRows,
         units: unitRows,
         flash,
@@ -84,11 +85,43 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             terms: lease.terms,
         })),
     }));
+    const mappedArchivedTenants = (archivedTenantRows ?? []).map((tenant) => ({
+        id: tenant.id,
+        name: tenant.name,
+        initials: tenant.initials,
+        contact: tenant.contact,
+        phone: tenant.phone,
+        email: tenant.email,
+        unit: tenant.unit,
+        floor: tenant.floor,
+        type: tenant.type,
+        rent: tenant.rent,
+        deposit: tenant.deposit,
+        leaseStart: tenant.lease_start,
+        leaseEnd: tenant.lease_end,
+        paymentMethod: tenant.payment_method,
+        status: tenant.status,
+        leases: (tenant.leases ?? []).map((lease) => ({
+            id: lease.id,
+            startDate: lease.start_date,
+            endDate: lease.end_date,
+            rent: lease.rent,
+            deposit: lease.deposit,
+            paymentMethod: lease.payment_method,
+            status: lease.status,
+            endedAt: lease.ended_at,
+            terms: lease.terms,
+        })),
+    }));
     const availableUnits = (unitRows ?? []).filter(
         (unit) => unit.status === 'vacant' && unit.tenant_id === null,
     );
     const defaultUnit = availableUnits[0];
     const [tenants, setTenants] = useState(mappedTenants);
+    const [archivedTenants, setArchivedTenants] = useState(
+        mappedArchivedTenants,
+    );
+    const [viewMode, setViewMode] = useState('active');
     const [search, setSearch] = useState('');
     const [filterStatus, setFilter] = useState('all');
     const [selected, setSelected] = useState(null);
@@ -143,6 +176,17 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         setTenants(mappedTenants);
     }, [tenantRows]);
     useEffect(() => {
+        setArchivedTenants(mappedArchivedTenants);
+    }, [archivedTenantRows]);
+    useEffect(() => {
+        if (viewMode !== 'active') {
+            setSelected(null);
+            setDetailOpen(false);
+            setEditOpen(false);
+            setRenewOpen(false);
+        }
+    }, [viewMode]);
+    useEffect(() => {
         const current = availableUnits.find(
             (unit) => unit.number === addForm.unit,
         );
@@ -164,10 +208,13 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             lastHandledSignal.current = openAddSignal;
         }
     }, [openAddSignal]);
-    const filtered = tenants.filter((t) => {
+    const visibleTenants = viewMode === 'active' ? tenants : archivedTenants;
+    const filtered = visibleTenants.filter((t) => {
         const matchSearch =
             t.name.toLowerCase().includes(search.toLowerCase()) ||
-            t.unit.toLowerCase().includes(search.toLowerCase());
+            String(t.unit ?? '')
+                .toLowerCase()
+                .includes(search.toLowerCase());
         const matchStatus = filterStatus === 'all' || t.status === filterStatus;
         return matchSearch && matchStatus;
     });
@@ -199,6 +246,25 @@ export default function TenantsPage({ openAddSignal = 0 }) {
               return right - left;
           })
         : [];
+    const transferUnitOptions = selected
+        ? (unitRows ?? []).filter(
+              (unit) =>
+                  unit.number === selected.unit ||
+                  (unit.status === 'vacant' && unit.tenant_id === null),
+          )
+        : [];
+    const restoreTenant = (tenantId) => {
+        if (!window.confirm('Restore this tenant?')) {
+            return;
+        }
+        router.post(`/admin/tenants/${tenantId}/restore`);
+    };
+    const archiveTenant = (tenantId) => {
+        if (!window.confirm('Archive this tenant?')) {
+            return;
+        }
+        router.delete(`/admin/tenants/${tenantId}`);
+    };
     const columns = [
         {
             key: 'name',
@@ -245,17 +311,30 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             width: 80,
             align: 'right',
             render: (_, row) => (
-                <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setSelected(row);
-                        setDetailOpen(true);
-                    }}
-                >
-                    View
-                </Button>
+                viewMode === 'active' ? (
+                    <Button
+                        variant="ghost"
+                        size="xs"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setSelected(row);
+                            setDetailOpen(true);
+                        }}
+                    >
+                        View
+                    </Button>
+                ) : (
+                    <Button
+                        variant="outline"
+                        size="xs"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            restoreTenant(row.id);
+                        }}
+                    >
+                        Restore
+                    </Button>
+                )
             ),
         },
     ];
@@ -303,7 +382,10 @@ export default function TenantsPage({ openAddSignal = 0 }) {
     };
     const startEdit = () => {
         if (!selected) return;
-        setEditForm(selected);
+        setEditForm({
+            ...selected,
+            unit: selected.unit,
+        });
         setEditOpen(true);
     };
     const saveEdit = () => {
@@ -315,6 +397,7 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             contact: editForm.contact,
             phone: editForm.phone,
             email: editForm.email,
+            unit: editForm.unit,
             payment_method: editForm.paymentMethod,
             status: editForm.status,
         });
@@ -446,15 +529,39 @@ export default function TenantsPage({ openAddSignal = 0 }) {
 
             <Card>
                 <Card.Header
-                    title="All Tenants"
+                    title={
+                        viewMode === 'active'
+                            ? 'All Tenants'
+                            : 'Archived Tenants'
+                    }
                     action={
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => setAddOpen(true)}
-                        >
-                            + Add Tenant
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
+                                {['active', 'archived'].map((tab) => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setViewMode(tab)}
+                                        className={[
+                                            'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                            viewMode === tab
+                                                ? 'bg-white text-[#1B2B4B] shadow-sm'
+                                                : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                                        ].join(' ')}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
+                            {viewMode === 'active' && (
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    onClick={() => setAddOpen(true)}
+                                >
+                                    + Add Tenant
+                                </Button>
+                            )}
+                        </div>
                     }
                 />
 
@@ -483,12 +590,15 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     keyField={'id'}
                     emptyText="No tenants match your search."
                     onRowClick={(row) => {
+                        if (viewMode !== 'active') {
+                            return;
+                        }
                         setSelected(row);
                         setDetailOpen(true);
                     }}
                 />
                 <Card.Footer>
-                    Showing {filtered.length} of {tenants.length} tenants
+                    Showing {filtered.length} of {visibleTenants.length} tenants
                 </Card.Footer>
             </Card>
 
@@ -511,6 +621,12 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             </Button>
                             <Button variant="primary" onClick={startEdit}>
                                 Edit Tenant
+                            </Button>
+                            <Button
+                                variant="danger"
+                                onClick={() => archiveTenant(selected.id)}
+                            >
+                                Archive Tenant
                             </Button>
                         </>
                     }
@@ -782,7 +898,6 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             full
                         >
                             <option value="GCash">GCash</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
                             <option value="Cash">Cash</option>
                         </Select>
                         <div className="col-span-2">
@@ -929,7 +1044,6 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                         full
                     >
                         <option value="GCash">GCash</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
                         <option value="Cash">Cash</option>
                     </Select>
                     <Input
@@ -994,6 +1108,23 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     }
                 >
                     <div className="grid grid-cols-2 gap-4">
+                        <Select
+                            label="Unit"
+                            value={String(editForm.unit ?? '')}
+                            onChange={(e) =>
+                                setEditForm((f) => ({
+                                    ...f,
+                                    unit: e.target.value,
+                                }))
+                            }
+                            full
+                        >
+                            {transferUnitOptions.map((unit) => (
+                                <option key={unit.id} value={unit.number}>
+                                    {unit.number} · {unit.floor} · {unit.type}
+                                </option>
+                            ))}
+                        </Select>
                         <Input
                             label="Contact"
                             value={String(editForm.contact ?? '')}
@@ -1040,7 +1171,6 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             full
                         >
                             <option value="GCash">GCash</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
                             <option value="Cash">Cash</option>
                         </Select>
                         <Select

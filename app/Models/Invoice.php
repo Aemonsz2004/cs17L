@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Invoice extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'invoice_no',
         'tenant_id',
@@ -71,7 +74,7 @@ class Invoice extends Model
      */
     public static function nextInvoiceNo(): string
     {
-        $last = static::latest('id')->value('invoice_no');
+        $last = static::withTrashed()->latest('id')->value('invoice_no');
 
         if (! $last) {
             return 'INV-001';

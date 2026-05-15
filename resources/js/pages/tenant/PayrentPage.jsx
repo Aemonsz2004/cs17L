@@ -13,19 +13,7 @@ const METHODS = [
         id: 'gcash',
         label: 'GCash',
         sub: 'API checkout',
-        detail: 'Creates a demo PayMongo payment intent and lets you simulate success.',
-    },
-    {
-        id: 'bank',
-        label: 'Bank Transfer',
-        sub: 'BDO / BPI / UnionBank',
-        detail: 'Account: 1234-5678-9012 · Pandarawan Realty Inc.',
-    },
-    {
-        id: 'cash',
-        label: 'Cash Payment',
-        sub: 'Pay at admin office',
-        detail: 'Admin Office, Ground Floor · Mon–Sat 8AM–5PM',
+        detail: 'Creates a demo PayMongo payment intent and lets you simulate success. Reference number is required.',
     },
 ];
 export default function PayRentPage() {
@@ -132,7 +120,15 @@ export default function PayRentPage() {
             router.post('/tenant/pay-rent', {
                 invoice_id: activeInvoice.id,
                 method: 'GCash',
-                reference: demoIntent.id,
+                reference: refNo.trim(),
+            }, {
+                onError: (errors) => {
+                    const message =
+                        errors?.invoice_id ??
+                        errors?.method ??
+                        'Unable to submit payment.';
+                    window.alert(message);
+                },
             });
         } catch (error) {
             window.alert('Unable to confirm demo payment.');
@@ -155,31 +151,12 @@ export default function PayRentPage() {
         : null;
     const selected = METHODS.find((m) => m.id === method);
     const handleConfirm = () => {
-        // Validate required reference for Bank Transfer
-        if (method === 'bank' && !refNo.trim()) {
-            window.alert('Bank Reference is required for Bank Transfer payments.');
+        if (!refNo.trim()) {
+            window.alert('Reference number is required for GCash payments.');
             return;
         }
 
-        if (method === 'gcash') {
-            void createDemoIntent();
-            return;
-        }
-        if (activeInvoice?.id) {
-            router.post('/tenant/pay-rent', {
-                invoice_id: activeInvoice.id,
-                method:
-                    method === 'gcash'
-                        ? 'GCash'
-                        : method === 'bank'
-                          ? 'Bank Transfer'
-                          : 'Cash',
-                reference: method === 'bank' ? refNo.trim() : undefined,
-            });
-            return;
-        }
-        setConfirmOpen(false);
-        setSuccessOpen(true);
+        void createDemoIntent();
     };
     if ((unpaidInvoices?.length ?? 0) === 0) {
         return (
@@ -334,32 +311,14 @@ export default function PayRentPage() {
                         </p>
                     </div>
 
-                    {/* Reference number (for GCash/Bank) */}
-                    {method === 'bank' && (
-                        <Input
-                            label="Reference / Transaction Number"
-                            placeholder="e.g. 1234567890"
-                            value={refNo}
-                            onChange={(e) => setRefNo(e.target.value)}
-                            helper="Enter the reference number from your GCash or bank transfer confirmation."
-                            full
-                        />
-                    )}
-
-                    {/* Cash instructions */}
-                    {method === 'cash' && (
-                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                            <p className="mb-1 text-sm font-semibold text-amber-700">
-                                Cash Payment Instructions
-                            </p>
-                            <p className="text-xs text-amber-600">
-                                Please bring exact change and your invoice
-                                number ({activeInvoice?.invoiceNo ?? 'N/A'}) to
-                                the admin office. A receipt will be issued upon
-                                payment. Office hours: Mon–Sat, 8AM–5PM.
-                            </p>
-                        </div>
-                    )}
+                    <Input
+                        label="Reference / Transaction Number"
+                        placeholder="e.g. 1234567890"
+                        value={refNo}
+                        onChange={(e) => setRefNo(e.target.value)}
+                        helper="Enter your GCash reference number."
+                        full
+                    />
                 </Card.Body>
                 <Card.Footer>
                     <div className="flex w-full items-center justify-between">
@@ -379,13 +338,9 @@ export default function PayRentPage() {
                             variant="primary"
                             size="md"
                             onClick={() => setConfirmOpen(true)}
-                            disabled={method === 'bank' && refNo.trim() === ''}
+                            disabled={refNo.trim() === ''}
                         >
-                            {method === 'gcash'
-                                ? 'Start GCash Demo Checkout'
-                                : method === 'cash'
-                                  ? "I've Paid — Notify Admin"
-                                  : 'Confirm Payment'}
+                            Start GCash Demo Checkout
                         </Button>
                     </div>
                 </Card.Footer>
@@ -426,7 +381,7 @@ export default function PayRentPage() {
                 <InfoRow label="Unit" value="-" />
                 <InfoRow label="Invoice" value={activeInvoice.invoiceNo} />
                 <InfoRow label="Method" value={selected.label} border={false} />
-                {method === 'bank' && refNo && (
+                {refNo && (
                     <InfoRow label="Reference" value={refNo} border={false} />
                 )}
             </Modal>

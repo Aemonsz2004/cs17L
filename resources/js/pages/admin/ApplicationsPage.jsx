@@ -22,21 +22,26 @@ const statusLabel = {
     converted: 'Converted',
 };
 
-export default function ApplicationsPage({ applications = [] }) {
+export default function ApplicationsPage({ applications = [], archivedApplications = [] }) {
     const flash = usePage().props?.flash ?? {};
     const [selectedApplication, setSelectedApplication] = useState(null);
     const [reviewOpen, setReviewOpen] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
     const [leaseTerms, setLeaseTerms] = useState('');
     const [leaseAttachment, setLeaseAttachment] = useState(null);
+    const [viewMode, setViewMode] = useState('active');
+
+    const visibleApplications = viewMode === 'active'
+        ? applications
+        : archivedApplications;
 
     const counters = useMemo(() => {
-        const pending = applications.filter((app) => app.status === 'pending_review').length;
-        const leaseWaiting = applications.filter((app) => app.status === 'approved').length;
-        const deposits = applications.filter((app) => app.status === 'payment_paid').length;
+        const pending = visibleApplications.filter((app) => app.status === 'pending_review').length;
+        const leaseWaiting = visibleApplications.filter((app) => app.status === 'approved').length;
+        const deposits = visibleApplications.filter((app) => app.status === 'payment_paid').length;
 
         return { pending, leaseWaiting, deposits };
-    }, [applications]);
+    }, [visibleApplications]);
 
     const approve = (applicationId) => {
         router.patch(`/admin/applications/${applicationId}/approve`, {}, { preserveScroll: true });
@@ -82,7 +87,24 @@ export default function ApplicationsPage({ applications = [] }) {
         }, { preserveScroll: true });
     };
 
+    const archiveApplication = (applicationId) => {
+        if (!window.confirm('Archive this application?')) {
+            return;
+        }
+        router.delete(`/admin/applications/${applicationId}`);
+    };
+
+    const restoreApplication = (applicationId) => {
+        if (!window.confirm('Restore this application?')) {
+            return;
+        }
+        router.post(`/admin/applications/${applicationId}/restore`);
+    };
+
     const openReview = (application) => {
+        if (viewMode !== 'active') {
+            return;
+        }
         setSelectedApplication(application);
         setRejectionReason(application.rejection_reason ?? '');
         setLeaseTerms(application.lease_terms ?? '');
@@ -103,6 +125,12 @@ export default function ApplicationsPage({ applications = [] }) {
             openReview(target);
         }
     }, [applications]);
+    useEffect(() => {
+        if (viewMode !== 'active') {
+            setReviewOpen(false);
+            setSelectedApplication(null);
+        }
+    }, [viewMode]);
 
     const closeReview = () => {
         setReviewOpen(false);
@@ -122,9 +150,27 @@ export default function ApplicationsPage({ applications = [] }) {
                             </p>
                             <h1 className="text-3xl font-black">Rental Applications</h1>
                         </div>
-                        <Link href="/admin/dashboard" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white">
-                            Back to Dashboard
-                        </Link>
+                        <div className="flex items-center gap-2">
+                            <div className="flex gap-0.5 rounded-lg bg-white/80 p-0.5">
+                                {['active', 'archived'].map((tab) => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setViewMode(tab)}
+                                        className={[
+                                            'rounded-md px-3 py-1 text-xs font-medium capitalize transition-all',
+                                            viewMode === tab
+                                                ? 'bg-[#15233d] text-white shadow-sm'
+                                                : 'text-[#42506b] hover:bg-white',
+                                        ].join(' ')}
+                                    >
+                                        {tab}
+                                    </button>
+                                ))}
+                            </div>
+                            <Link href="/admin/dashboard" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white">
+                                Back to Dashboard
+                            </Link>
+                        </div>
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-3">
@@ -162,7 +208,7 @@ export default function ApplicationsPage({ applications = [] }) {
                     )}
 
                     <div className="space-y-4">
-                        {applications.map((application) => (
+                        {visibleApplications.map((application) => (
                             <article key={application.id} className="rounded-2xl border border-[#15233d]/10 bg-white p-5 shadow-sm">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div>
@@ -214,13 +260,32 @@ export default function ApplicationsPage({ applications = [] }) {
                                 )}
 
                                 <div className="mt-4 flex flex-wrap gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => openReview(application)}
-                                        className="rounded-lg bg-[#15233d] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0f1a2d]"
-                                    >
-                                        Review Details
-                                    </button>
+                                    {viewMode === 'active' ? (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => openReview(application)}
+                                                className="rounded-lg bg-[#15233d] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0f1a2d]"
+                                            >
+                                                Review Details
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => archiveApplication(application.id)}
+                                                className="rounded-lg border border-[#ef4444]/40 px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                                            >
+                                                Archive
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => restoreApplication(application.id)}
+                                            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                                        >
+                                            Restore
+                                        </button>
+                                    )}
                                 </div>
                             </article>
                         ))}

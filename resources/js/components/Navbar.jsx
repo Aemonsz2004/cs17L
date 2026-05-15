@@ -43,11 +43,6 @@ export default function Navbar({
                         {user.role}
                     </p>
                 </div>
-                <Icon
-                    name="chevron-down"
-                    size={12}
-                    className="text-[var(--rtms-muted)]"
-                />
             </div>
         </header>
     );

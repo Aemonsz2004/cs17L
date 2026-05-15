@@ -86,6 +86,7 @@ Route::middleware(['auth', 'admin'])
             Route::patch('/{tenant}',  [TenantController::class, 'update']) ->name('update');
             Route::post('/{tenant}/renew', [TenantController::class, 'renew'])->name('renew');
             Route::delete('/{tenant}', [TenantController::class, 'destroy'])->name('destroy');
+            Route::post('/{tenant}/restore', [TenantController::class, 'restore'])->name('restore');
         });
 
         // Units
@@ -94,6 +95,7 @@ Route::middleware(['auth', 'admin'])
             Route::post('/',          [UnitController::class, 'store'])  ->name('store');
             Route::patch('/{unit}',   [UnitController::class, 'update']) ->name('update');
             Route::delete('/{unit}',  [UnitController::class, 'destroy'])->name('destroy');
+            Route::post('/{unit}/restore', [UnitController::class, 'restore'])->name('restore');
         });
 
         // Billing
@@ -101,6 +103,8 @@ Route::middleware(['auth', 'admin'])
             Route::get('/',                         [BillingController::class, 'index'])      ->name('index');
             Route::post('/',                        [BillingController::class, 'store'])      ->name('store');
             Route::get('/{invoice}',                [BillingController::class, 'show'])       ->name('show');
+            Route::delete('/{invoice}',             [BillingController::class, 'destroy'])    ->name('destroy');
+            Route::post('/{invoice}/restore',       [BillingController::class, 'restore'])    ->name('restore');
             Route::patch('/{invoice}/mark-paid',    [BillingController::class, 'markPaid'])   ->name('mark-paid');
             Route::patch('/{invoice}/mark-overdue', [BillingController::class, 'markOverdue'])->name('mark-overdue');
             Route::patch('/{invoice}/confirm-bank', [BillingController::class, 'confirmBankTransfer'])->name('confirm-bank');
@@ -112,6 +116,7 @@ Route::middleware(['auth', 'admin'])
             Route::post('/',               [MaintenanceController::class, 'store'])  ->name('store');
             Route::patch('/{maintenance}', [MaintenanceController::class, 'update']) ->name('update');
             Route::delete('/{maintenance}',[MaintenanceController::class, 'destroy'])->name('destroy');
+            Route::post('/{maintenance}/restore', [MaintenanceController::class, 'restore'])->name('restore');
         });
 
         // Notifications
@@ -120,6 +125,8 @@ Route::middleware(['auth', 'admin'])
             Route::get('/',                        [AdminNotificationController::class, 'index'])      ->name('index');
             Route::post('/read-all',               [AdminNotificationController::class, 'markAllRead'])->name('read-all');
             Route::patch('/{notification}/read',   [AdminNotificationController::class, 'markRead'])  ->name('read');
+            Route::delete('/{notification}',       [AdminNotificationController::class, 'destroy'])   ->name('destroy');
+            Route::post('/{notification}/restore', [AdminNotificationController::class, 'restore'])   ->name('restore');
         });
 
         // Reports
@@ -133,6 +140,8 @@ Route::middleware(['auth', 'admin'])
             Route::patch('/{application}/send-lease', [ApplicationReviewController::class, 'sendLease'])->name('send-lease');
             Route::patch('/{application}/confirm-deposit', [ApplicationReviewController::class, 'confirmDeposit'])->name('confirm-deposit');
             Route::post('/{application}/convert-tenant', [ApplicationReviewController::class, 'convertToTenant'])->name('convert-tenant');
+            Route::delete('/{application}', [ApplicationReviewController::class, 'destroy'])->name('destroy');
+            Route::post('/{application}/restore', [ApplicationReviewController::class, 'restore'])->name('restore');
         });
 
         // Tenant messages
@@ -155,6 +164,8 @@ Route::middleware(['auth', 'tenant'])
 
         // Billing
         Route::get('/billing', [TenantBillingController::class, 'index'])->name('billing');
+        Route::delete('/billing/{invoice}', [TenantBillingController::class, 'destroy'])->name('billing.destroy');
+        Route::post('/billing/{invoice}/restore', [TenantBillingController::class, 'restore'])->name('billing.restore');
 
         // Pay rent
         Route::get('/pay-rent',  [PaymentController::class, 'index']) ->name('pay-rent');
@@ -170,6 +181,8 @@ Route::middleware(['auth', 'tenant'])
         // Maintenance
         Route::get('/maintenance',  [TenantMaintenanceController::class, 'index'])->name('maintenance');
         Route::post('/maintenance', [TenantMaintenanceController::class, 'store'])->name('maintenance.store');
+        Route::delete('/maintenance/{maintenance}', [TenantMaintenanceController::class, 'destroy'])->name('maintenance.destroy');
+        Route::post('/maintenance/{maintenance}/restore', [TenantMaintenanceController::class, 'restore'])->name('maintenance.restore');
 
         // Messages
         Route::get('/messages',  [MessageController::class, 'index'])->name('messages');
@@ -180,6 +193,8 @@ Route::middleware(['auth', 'tenant'])
             Route::get('/',          [TenantNotificationController::class, 'index'])      ->name('index');
             Route::post('/read-all', [TenantNotificationController::class, 'markAllRead'])->name('read-all');
             Route::patch('/{notification}/read', [TenantNotificationController::class, 'markRead'])->name('read');
+            Route::delete('/{notification}', [TenantNotificationController::class, 'destroy'])->name('destroy');
+            Route::post('/{notification}/restore', [TenantNotificationController::class, 'restore'])->name('restore');
         });
     });
 

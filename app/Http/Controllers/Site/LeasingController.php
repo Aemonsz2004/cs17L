@@ -89,11 +89,13 @@ class LeasingController extends Controller
 
     private function mapUnit(Unit $unit): array
     {
-        $gallery = [
-            sprintf('https://picsum.photos/seed/unit-%d-1/1200/700', $unit->id),
-            sprintf('https://picsum.photos/seed/unit-%d-2/1200/700', $unit->id),
-            sprintf('https://picsum.photos/seed/unit-%d-3/1200/700', $unit->id),
-        ];
+        $gallery = $unit->gallery && count($unit->gallery) > 0
+            ? $unit->gallery
+            : [
+                sprintf('https://picsum.photos/seed/unit-%d-1/1200/700', $unit->id),
+                sprintf('https://picsum.photos/seed/unit-%d-2/1200/700', $unit->id),
+                sprintf('https://picsum.photos/seed/unit-%d-3/1200/700', $unit->id),
+            ];
 
         return [
             'id' => $unit->id,
@@ -106,6 +108,7 @@ class LeasingController extends Controller
             'tenant_id' => $unit->tenant_id,
             'is_available' => $unit->status === 'vacant' && $unit->tenant_id === null,
             'gallery' => $gallery,
+            'description' => $unit->description,
             'specs' => [
                 'Floor' => $unit->floor,
                 'Type' => $unit->type,
