@@ -6,6 +6,7 @@ use App\Models\Lease;
 use App\Models\RentalApplication;
 use App\Models\Tenant;
 use App\Models\Unit;
+use App\Models\UnitHistory;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -31,6 +32,12 @@ class TenantService
                     'tenant_id' => $existingTenant->id,
                     'status' => 'occupied',
                     'reserved_until' => null,
+                ]);
+
+                UnitHistory::create([
+                    'unit_id' => $unit->id,
+                    'tenant_id' => $existingTenant->id,
+                    'start_date' => now()->toDateString(),
                 ]);
             }
 
@@ -63,7 +70,7 @@ class TenantService
             'status' => 'active',
         ]);
 
-        Lease::create([
+        $lease = Lease::create([
             'tenant_id' => $tenant->id,
             'unit_id' => $unit->id,
             'start_date' => $startDate->toDateString(),
@@ -87,6 +94,13 @@ class TenantService
             'tenant_id' => $tenant->id,
             'status' => 'occupied',
             'reserved_until' => null,
+        ]);
+
+        UnitHistory::create([
+            'unit_id' => $unit->id,
+            'tenant_id' => $tenant->id,
+            'lease_id' => $lease->id,
+            'start_date' => $startDate->toDateString(),
         ]);
 
         return $tenant;

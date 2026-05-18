@@ -8,17 +8,15 @@ use App\Models\RentalApplication;
 use App\Models\RtmsNotification;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 class ApplicationPaymentService
 {
-    public function __construct(private readonly ApplicationAuditService $audit)
-    {
-    }
+    public function __construct(private readonly ApplicationAuditService $audit) {}
 
     public function initiateDepositPayment(RentalApplication $application, string $paymentMethod, bool $forceRegenerate = false): ApplicationPayment
     {
@@ -135,13 +133,13 @@ class ApplicationPaymentService
 
         try {
             $response = $this->payMongoHttpClient($secretKey, $timeoutSeconds)
-                ->get($baseUrl . '/checkout_sessions/' . $providerReference);
+                ->get($baseUrl.'/checkout_sessions/'.$providerReference);
         } catch (ConnectionException $exception) {
             if ($this->shouldRetryWithoutTlsVerification($exception)) {
                 $response = $this->payMongoHttpClient($secretKey, $timeoutSeconds, true)
-                    ->get($baseUrl . '/checkout_sessions/' . $providerReference);
+                    ->get($baseUrl.'/checkout_sessions/'.$providerReference);
             } else {
-                throw new \RuntimeException('Failed to sync PayMongo checkout status: ' . $exception->getMessage(), 0, $exception);
+                throw new \RuntimeException('Failed to sync PayMongo checkout status: '.$exception->getMessage(), 0, $exception);
             }
         }
 
@@ -171,7 +169,7 @@ class ApplicationPaymentService
             return false;
         }
 
-        $providerEventId = 'manual_sync_' . $providerReference . '_' . time();
+        $providerEventId = 'manual_sync_'.$providerReference.'_'.time();
 
         $this->handleWebhookPayload([
             'data' => [
@@ -194,11 +192,11 @@ class ApplicationPaymentService
 
     private function createCheckout(RentalApplication $application, string $paymentMethod, int $amountInPhp, Carbon $expiresAt): array
     {
-        $localReference = 'pi_pm_' . Str::lower(Str::random(20));
+        $localReference = 'pi_pm_'.Str::lower(Str::random(20));
         $checkoutTemplate = (string) config('services.paymongo.checkout_base_url', 'https://payments.paymongo.com/checkout/{reference}');
         $simulatedCheckoutUrl = str_contains($checkoutTemplate, '{reference}')
             ? str_replace('{reference}', $localReference, $checkoutTemplate)
-            : rtrim($checkoutTemplate, '/') . '/' . $localReference;
+            : rtrim($checkoutTemplate, '/').'/'.$localReference;
 
         $enabled = (bool) config('services.paymongo.enabled', false);
         $secretKey = (string) config('services.paymongo.secret_key', '');
@@ -215,8 +213,8 @@ class ApplicationPaymentService
         }
 
         $baseUrl = rtrim((string) config('services.paymongo.base_url', 'https://api.paymongo.com/v1'), '/');
-        $successUrl = (string) config('services.paymongo.success_url', rtrim((string) config('app.url', ''), '/') . '/apply/dashboard');
-        $cancelUrl = (string) config('services.paymongo.cancel_url', rtrim((string) config('app.url', ''), '/') . '/apply/dashboard');
+        $successUrl = (string) config('services.paymongo.success_url', rtrim((string) config('app.url', ''), '/').'/apply/dashboard');
+        $cancelUrl = (string) config('services.paymongo.cancel_url', rtrim((string) config('app.url', ''), '/').'/apply/dashboard');
         $timeoutSeconds = max(5, (int) config('services.paymongo.timeout_seconds', 20));
 
         $amountInCentavos = $amountInPhp * 100;
@@ -259,7 +257,7 @@ class ApplicationPaymentService
 
         try {
             $response = $this->payMongoHttpClient($secretKey, $timeoutSeconds)
-                ->post($baseUrl . '/checkout_sessions', $payload);
+                ->post($baseUrl.'/checkout_sessions', $payload);
         } catch (ConnectionException $exception) {
             if ($this->shouldRetryWithoutTlsVerification($exception)) {
                 logger()->warning('Retrying PayMongo request without TLS verification in local environment due to certificate error.', [
@@ -267,9 +265,9 @@ class ApplicationPaymentService
                 ]);
 
                 $response = $this->payMongoHttpClient($secretKey, $timeoutSeconds, true)
-                    ->post($baseUrl . '/checkout_sessions', $payload);
+                    ->post($baseUrl.'/checkout_sessions', $payload);
             } else {
-                throw new \RuntimeException('Failed to connect to PayMongo API: ' . $exception->getMessage(), 0, $exception);
+                throw new \RuntimeException('Failed to connect to PayMongo API: '.$exception->getMessage(), 0, $exception);
             }
         }
 
@@ -336,7 +334,7 @@ class ApplicationPaymentService
         }
 
         if (! is_file($caBundlePath)) {
-            throw new \RuntimeException('PAYMONGO_CA_BUNDLE_PATH is set but file was not found: ' . $caBundlePath);
+            throw new \RuntimeException('PAYMONGO_CA_BUNDLE_PATH is set but file was not found: '.$caBundlePath);
         }
 
         return $request->withOptions(['verify' => $caBundlePath]);
@@ -390,7 +388,7 @@ class ApplicationPaymentService
             throw new \RuntimeException('PayMongo signature timestamp is stale.');
         }
 
-        $computed = hash_hmac('sha256', $timestamp . '.' . $payload, $secret);
+        $computed = hash_hmac('sha256', $timestamp.'.'.$payload, $secret);
 
         if (! hash_equals($computed, $provided)) {
             throw new \RuntimeException('Invalid PayMongo webhook signature.');

@@ -14,7 +14,7 @@ class NotifyAdminOnLeaseAccepted
 
         RtmsNotification::create([
             'variant' => 'teal',
-            'message' => 'Lease accepted by applicant' . ($application ? ": {$application->full_name}" : '.') . ' Payment window is now open.',
+            'message' => 'Lease accepted by applicant'.($application ? ": {$application->full_name}" : '.').' Payment window is now open.',
             'category' => 'lease',
             'tenant_id' => null,
             'unread' => true,

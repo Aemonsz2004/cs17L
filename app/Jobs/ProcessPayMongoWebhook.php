@@ -19,9 +19,7 @@ class ProcessPayMongoWebhook implements ShouldQueue
 
     public array $backoff = [10, 30, 60, 120, 300];
 
-    public function __construct(private readonly int $webhookEventId)
-    {
-    }
+    public function __construct(private readonly int $webhookEventId) {}
 
     public function handle(ApplicationPaymentService $paymentService): void
     {

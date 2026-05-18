@@ -69,7 +69,7 @@ export default function MyUnitPage({
                             {tenant.name}
                         </h2>
                         <p className="mt-0.5 text-sm text-white/50">
-                            Unit {tenant.unit} · {tenant.floor} · {tenant.type}
+                            {(tenant.units ?? []).map((u) => u.number).join(', ')} · {tenant.floor} · {tenant.type}
                         </p>
                     </div>
                 </div>
@@ -148,15 +148,7 @@ export default function MyUnitPage({
                     </p>
                     <div className="mb-2 flex items-center justify-between">
                         <span className="text-sm text-[#5C6B88]">Status</span>
-                        {tenant.status === 'active' && (
-                            <Badge variant="green">Active</Badge>
-                        )}
-                        {tenant.status === 'expiring' && (
-                            <Badge variant="amber">Expiring</Badge>
-                        )}
-                        {tenant.status === 'overdue' && (
-                            <Badge variant="red">Overdue</Badge>
-                        )}
+                        <Badge variant="green">Active</Badge>
                     </div>
                     <div className="mb-3 flex items-center justify-between">
                         <span className="text-sm text-[#5C6B88]">Expires</span>
@@ -227,7 +219,7 @@ export default function MyUnitPage({
                     <Card.Body>
                         <InfoRow
                             label="Unit Number"
-                            value={`Unit ${tenant.unit}`}
+                            value={(tenant.units ?? []).map((u) => u.number).join(', ')}
                         />
                         <InfoRow label="Floor" value={tenant.floor} />
                         <InfoRow label="Unit Type" value={tenant.type} />

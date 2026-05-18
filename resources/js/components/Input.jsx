@@ -7,6 +7,7 @@ function FieldWrapper({
     full,
     className,
     htmlFor,
+    required,
     children,
 }) {
     return (
@@ -23,6 +24,7 @@ function FieldWrapper({
                     className="text-[11px] font-semibold tracking-wider text-[#5C6B88] uppercase"
                 >
                     {label}
+                    {required && <span className="text-red-500 ml-1">*</span>}
                 </label>
             )}
             {children}
@@ -43,7 +45,7 @@ const normalBorder =
     'border-[#1B2B4B]/15 hover:border-[#1B2B4B]/30 focus:border-[#24A18F]';
 const errorBorder = 'border-red-300 focus:border-red-400 focus:ring-red-200/30';
 export const Input = forwardRef(function Input(
-    { label, error, helper, full, leftIcon, rightIcon, className, id, ...rest },
+    { label, error, helper, full, leftIcon, rightIcon, className, id, required, ...rest },
     ref,
 ) {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
@@ -54,6 +56,7 @@ export const Input = forwardRef(function Input(
             helper={helper}
             full={full}
             htmlFor={inputId}
+            required={required}
         >
             <div className="relative">
                 {leftIcon && (
@@ -84,7 +87,7 @@ export const Input = forwardRef(function Input(
     );
 });
 export const Select = forwardRef(function Select(
-    { label, error, helper, full, className, id, children, ...rest },
+    { label, error, helper, full, className, id, required, children, ...rest },
     ref,
 ) {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
@@ -95,6 +98,7 @@ export const Select = forwardRef(function Select(
             helper={helper}
             full={full}
             htmlFor={inputId}
+            required={required}
         >
             <select
                 ref={ref}
@@ -113,7 +117,7 @@ export const Select = forwardRef(function Select(
     );
 });
 export const Textarea = forwardRef(function Textarea(
-    { label, error, helper, full, className, id, rows = 3, ...rest },
+    { label, error, helper, full, className, id, rows = 3, required, ...rest },
     ref,
 ) {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
@@ -124,6 +128,7 @@ export const Textarea = forwardRef(function Textarea(
             helper={helper}
             full={full}
             htmlFor={inputId}
+            required={required}
         >
             <textarea
                 ref={ref}

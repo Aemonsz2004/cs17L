@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2024_01_01_000007_create_messages_table.php
 
 use Illuminate\Database\Migrations\Migration;
@@ -12,8 +13,8 @@ return new class extends Migration
         Schema::create('messages', function (Blueprint $table) {
             $table->id();
             $table->foreignId('tenant_id')
-                  ->constrained('tenants')
-                  ->cascadeOnDelete();
+                ->constrained('tenants')
+                ->cascadeOnDelete();
             $table->enum('from', ['admin', 'tenant']);
             $table->text('text');
             $table->boolean('read')->default(false);

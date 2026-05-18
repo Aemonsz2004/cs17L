@@ -1,4 +1,6 @@
 import { Head, Link, useForm } from '@inertiajs/react';
+import { Input } from '../components/Input';
+import Button from '../components/Button';
 export default function Login() {
     const { data, setData, post, processing, errors } = useForm({
         email: '',
@@ -22,55 +24,25 @@ export default function Login() {
                     </p>
 
                     <form className="mt-6 space-y-4" onSubmit={submit}>
-                        <div>
-                            <label
-                                htmlFor="email"
-                                className="block text-sm font-medium text-[#1B2B4B]"
-                            >
-                                Email
-                            </label>
-                            <input
-                                id="email"
-                                type="email"
-                                value={data.email}
-                                onChange={(e) =>
-                                    setData('email', e.target.value)
-                                }
-                                className="mt-1 w-full rounded-lg border border-[#1B2B4B]/20 px-3 py-2 outline-none focus:ring-2 focus:ring-[#24A18F]/30"
-                                required
-                            />
-                            {errors.email && (
-                                <p className="mt-1 text-sm text-red-600">
-                                    {errors.email}
-                                </p>
-                            )}
-                        </div>
+                        <Input
+                            label="Email"
+                            type="email"
+                            required
+                            value={data.email}
+                            onChange={e => setData('email', e.target.value)}
+                            error={errors.email}
+                        />
 
-                        <div>
-                            <label
-                                htmlFor="password"
-                                className="block text-sm font-medium text-[#1B2B4B]"
-                            >
-                                Password
-                            </label>
-                            <input
-                                id="password"
-                                type="password"
-                                value={data.password}
-                                onChange={(e) =>
-                                    setData('password', e.target.value)
-                                }
-                                className="mt-1 w-full rounded-lg border border-[#1B2B4B]/20 px-3 py-2 outline-none focus:ring-2 focus:ring-[#24A18F]/30"
-                                required
-                            />
-                            {errors.password && (
-                                <p className="mt-1 text-sm text-red-600">
-                                    {errors.password}
-                                </p>
-                            )}
-                        </div>
+                        <Input
+                            label="Password"
+                            type="password"
+                            required
+                            value={data.password}
+                            onChange={e => setData('password', e.target.value)}
+                            error={errors.password}
+                        />
 
-                        <label className="inline-flex items-center gap-2 text-sm text-[#1B2B4B]">
+                        {/* <label className="inline-flex items-center gap-2 text-sm text-[#1B2B4B]">
                             <input
                                 type="checkbox"
                                 checked={data.remember}
@@ -80,15 +52,15 @@ export default function Login() {
                                 className="rounded border-[#1B2B4B]/30"
                             />
                             Remember me
-                        </label>
+                        </label> */}
 
-                        <button
+                        <Button
                             type="submit"
-                            disabled={processing}
-                            className="w-full rounded-lg bg-[#1B2B4B] py-2.5 font-medium text-white hover:bg-[#15233D] disabled:opacity-60"
+                            loading={processing}
+                            full
                         >
-                            {processing ? 'Signing in...' : 'Sign in'}
-                        </button>
+                            Sign in
+                        </Button>
                     </form>
 
                     <p className="mt-4 text-sm text-[#5C6B88]">

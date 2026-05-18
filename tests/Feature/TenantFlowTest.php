@@ -10,11 +10,11 @@ use App\Models\User;
 function makeTenantFixture(string $suffix = 'a'): array
 {
     $tenant = Tenant::create([
-        'name' => 'Tenant ' . strtoupper($suffix),
-        'initials' => strtoupper($suffix) . 'T',
-        'contact' => 'Contact ' . strtoupper($suffix),
-        'phone' => '0912000000' . ($suffix === 'a' ? '1' : '2'),
-        'email' => 'tenant-' . $suffix . '@example.com',
+        'name' => 'Tenant '.strtoupper($suffix),
+        'initials' => strtoupper($suffix).'T',
+        'contact' => 'Contact '.strtoupper($suffix),
+        'phone' => '0912000000'.($suffix === 'a' ? '1' : '2'),
+        'email' => 'tenant-'.$suffix.'@example.com',
         'unit' => $suffix === 'a' ? '101' : '102',
         'floor' => '1F',
         'type' => 'Office',
@@ -27,8 +27,8 @@ function makeTenantFixture(string $suffix = 'a'): array
     ]);
 
     $user = User::create([
-        'name' => 'Tenant User ' . strtoupper($suffix),
-        'email' => 'tenant-' . $suffix . '@test.local',
+        'name' => 'Tenant User '.strtoupper($suffix),
+        'email' => 'tenant-'.$suffix.'@test.local',
         'password' => 'password',
         'role' => 'tenant',
         'tenant_id' => $tenant->id,

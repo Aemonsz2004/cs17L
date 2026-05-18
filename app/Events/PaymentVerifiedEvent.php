@@ -8,6 +8,5 @@ class PaymentVerifiedEvent
         public readonly int $applicationId,
         public readonly int $paymentId,
         public readonly ?string $providerEventId = null,
-    ) {
-    }
+    ) {}
 }

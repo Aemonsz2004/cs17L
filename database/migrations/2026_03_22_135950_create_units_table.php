@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2024_01_01_000003_create_units_table.php
 
 use Illuminate\Database\Migrations\Migration;
@@ -22,5 +23,8 @@ return new class extends Migration
         });
     }
 
-    public function down(): void { Schema::dropIfExists('units'); }
+    public function down(): void
+    {
+        Schema::dropIfExists('units');
+    }
 };

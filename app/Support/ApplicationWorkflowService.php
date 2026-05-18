@@ -7,6 +7,7 @@ use App\Events\TenantCreatedEvent;
 use App\Models\ApplicationPayment;
 use App\Models\RentalApplication;
 use App\Models\Unit;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -40,8 +41,7 @@ class ApplicationWorkflowService
         private readonly TenantService $tenantService,
         private readonly LeaseService $leaseService,
         private readonly ApplicationAuditService $audit,
-    ) {
-    }
+    ) {}
 
     public function approve(RentalApplication $application, ?int $adminId): void
     {
@@ -419,6 +419,10 @@ class ApplicationWorkflowService
                 'admin_id' => $actorId,
             ],
         );
+
+        User::whereKey($application->user_id)
+            ->where('role', 'applicant')
+            ->update(['role' => 'tenant']);
 
         event(new TenantCreatedEvent((int) $application->id, (int) $tenant->id, (int) $application->user_id));
 

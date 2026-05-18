@@ -118,7 +118,7 @@ export default function TenantSidebar({
                             {user.name}
                         </p>
                         <p className="truncate text-[10px] text-white/35">
-                            Unit {user.unit ?? '-'} · Tenant
+                            {(user.tenant?.units ?? []).map((u) => u.number).join(', ') || '-'} · Tenant
                         </p>
                     </div>
                     <button

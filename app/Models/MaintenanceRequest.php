@@ -36,7 +36,18 @@ class MaintenanceRequest extends Model
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    public function isOpen(): bool       { return $this->status === 'open';       }
-    public function isInProgress(): bool { return $this->status === 'inprogress'; }
-    public function isResolved(): bool   { return $this->status === 'resolved';   }
+    public function isOpen(): bool
+    {
+        return $this->status === 'open';
+    }
+
+    public function isInProgress(): bool
+    {
+        return $this->status === 'inprogress';
+    }
+
+    public function isResolved(): bool
+    {
+        return $this->status === 'resolved';
+    }
 }

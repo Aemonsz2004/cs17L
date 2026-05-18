@@ -18,9 +18,15 @@ class UnitController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'units',
-            'units' => Unit::with(['tenant' => fn ($query) => $query->withTrashed()])->latest()->get(),
+            'units' => Unit::with([
+                'tenant' => fn ($query) => $query->withTrashed(),
+                'unitHistories.tenant',
+            ])->latest()->get(),
             'archivedUnits' => Unit::onlyTrashed()
-                ->with(['tenant' => fn ($query) => $query->withTrashed()])
+                ->with([
+                    'tenant' => fn ($query) => $query->withTrashed(),
+                    'unitHistories.tenant',
+                ])
                 ->latest('deleted_at')
                 ->get(),
             'tenants' => Tenant::latest()->get(),
@@ -39,11 +45,12 @@ class UnitController extends Controller
             'type' => ['required', 'in:Office,Retail,Medical'],
             'area' => ['required', 'integer', 'min:1'],
             'base_rent' => ['required', 'integer', 'min:0'],
-            'status' => ['nullable', 'in:occupied,vacant,reserved,expiring,overdue'],
+
             'tenant_id' => ['nullable', 'exists:tenants,id'],
             'description' => ['nullable', 'string', 'max:1000'],
             'gallery' => ['nullable', 'array'],
             'gallery.*' => ['file', 'image', 'max:5120'],
+            'status' => ['required', Rule::in(['vacant', 'occupied', 'maintenance', 'pending', 'reserved'])],
         ]);
 
         if ($request->hasFile('gallery')) {
@@ -74,7 +81,7 @@ class UnitController extends Controller
             'type' => ['sometimes', 'in:Office,Retail,Medical'],
             'area' => ['sometimes', 'integer', 'min:1'],
             'base_rent' => ['sometimes', 'integer', 'min:0'],
-            'status' => ['sometimes', 'in:occupied,vacant,reserved,expiring,overdue'],
+            'status' => ['sometimes', 'in:occupied,vacant,reserved,maintenance,pending'],
             'tenant_id' => ['nullable', 'exists:tenants,id'],
             'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
             'gallery' => ['sometimes', 'nullable', 'array'],

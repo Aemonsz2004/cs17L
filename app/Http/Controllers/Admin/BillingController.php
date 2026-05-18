@@ -6,10 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Lease;
 use App\Models\Tenant;
-use App\Models\Unit;
+use App\Support\CashPaymentService;
 use App\Support\TenantNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -55,18 +56,10 @@ class BillingController extends Controller
         $data['penalty'] = $data['penalty'] ?? 0;
         $data['status'] = $data['status'] ?? 'due';
         $data['invoice_no'] = Invoice::nextInvoiceNo();
-        $tenant = Tenant::find($data['tenant_id']);
-        $unitRent = $tenant?->unit
-            ? Unit::where('number', $tenant->unit)->value('base_rent')
-            : null;
-
-        if ($unitRent !== null) {
-            $data['rent'] = (int) $unitRent;
-        }
         $data['total'] = $data['rent'] + $data['utilities'] + $data['penalty'];
         $data['paid_date'] = $data['status'] === 'paid' ? now()->toDateString() : null;
         $data['lease_id'] = Lease::where('tenant_id', $data['tenant_id'])
-            ->whereIn('status', ['active', 'expiring', 'overdue'])
+            ->where('status', 'active')
             ->latest('id')
             ->value('id');
 
@@ -97,7 +90,7 @@ class BillingController extends Controller
 
         if ($invoice->status !== 'overdue') {
             $invoice->update(['status' => 'overdue']);
-            TenantNotificationService::notifyInvoiceOverdue($invoice->fresh());
+            TenantNotificationService::notifyInvoiceOverdue($invoice);
         }
 
         return redirect()->route('admin.billing.index')->with('success', 'Invoice marked overdue.');
@@ -118,6 +111,31 @@ class BillingController extends Controller
 
         return redirect()->route('admin.billing.index')
             ->with('success', sprintf('Bank Transfer confirmed for Invoice %s.', $invoice->invoice_no));
+    }
+
+    public function confirmCashPayment(Request $request, Invoice $invoice, CashPaymentService $cashPaymentService): RedirectResponse
+    {
+        $data = $request->validate([
+            'receipt_number' => ['required', 'string', 'max:100'],
+        ]);
+
+        abort_unless($invoice->method === 'Cash', 400);
+        abort_unless(in_array($invoice->status, ['due', 'pending']), 400);
+
+        try {
+            $cashPaymentService->confirmCashPayment(
+                $invoice,
+                $data['receipt_number'],
+                Auth::id(),
+            );
+        } catch (\RuntimeException $exception) {
+            return redirect()->route('admin.billing.index')->with('error', $exception->getMessage());
+        }
+
+        TenantNotificationService::notifyPaymentConfirmed($invoice);
+
+        return redirect()->route('admin.billing.index')
+            ->with('success', sprintf('Cash payment confirmed for Invoice %s.', $invoice->invoice_no));
     }
 
     public function destroy(Invoice $invoice): RedirectResponse

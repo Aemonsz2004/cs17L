@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2024_01_01_000005_create_maintenance_requests_table.php
 
 use Illuminate\Database\Migrations\Migration;
@@ -15,9 +16,9 @@ return new class extends Migration
             $table->string('unit', 10);
             $table->string('tenant');
             $table->foreignId('tenant_id')
-                  ->nullable()
-                  ->constrained('tenants')
-                  ->nullOnDelete();
+                ->nullable()
+                ->constrained('tenants')
+                ->nullOnDelete();
             $table->enum('type', [
                 'Electrical',
                 'Plumbing',

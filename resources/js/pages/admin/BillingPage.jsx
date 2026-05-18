@@ -46,7 +46,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
                 invoiceNo: invoice.invoice_no,
                 tenantId: invoice.tenant_id,
                 tenant: invoice.tenant?.name ?? `Tenant #${invoice.tenant_id}`,
-                unit: invoice.tenant?.unit ?? '-',
+                unit: (invoice.tenant?.units ?? []).map((u) => u.number).join(', ') || '-',
                 period: invoice.period,
                 rent: invoice.rent,
                 utilities: invoice.utilities,
@@ -67,7 +67,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
                 invoiceNo: invoice.invoice_no,
                 tenantId: invoice.tenant_id,
                 tenant: invoice.tenant?.name ?? `Tenant #${invoice.tenant_id}`,
-                unit: invoice.tenant?.unit ?? '-',
+                unit: (invoice.tenant?.units ?? []).map((u) => u.number).join(', ') || '-',
                 period: invoice.period,
                 rent: invoice.rent,
                 utilities: invoice.utilities,
@@ -190,6 +190,9 @@ export default function BillingPage({ openAddSignal = 0 }) {
     const pendingBankTransfers = invoices.filter(
         (i) => i.method === 'Bank Transfer' && i.status === 'due',
     );
+    const pendingCashPayments = invoices.filter(
+        (i) => i.method === 'Cash' && i.status === 'due',
+    );
 
     const columns = [
         {
@@ -310,6 +313,38 @@ export default function BillingPage({ openAddSignal = 0 }) {
                                     </p>
                                     <p className="text-xs text-amber-700">
                                         Ref: {inv.reference}
+                                    </p>
+                                </div>
+                                <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    onClick={() => {
+                                        setSelected(inv);
+                                        setDetailOpen(true);
+                                    }}
+                                >
+                                    Review
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {viewMode === 'active' && pendingCashPayments.length > 0 && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                    <p className="mb-2 text-sm font-semibold text-emerald-700">
+                        {pendingCashPayments.length} Cash Payment{pendingCashPayments.length !== 1 ? 's' : ''} Awaiting Confirmation
+                    </p>
+                    <div className="space-y-2">
+                        {pendingCashPayments.map((inv) => (
+                            <div key={inv.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
+                                <div>
+                                    <p className="font-semibold text-emerald-900">
+                                        {inv.invoiceNo} · {inv.tenant}
+                                    </p>
+                                    <p className="text-xs text-emerald-700">
+                                        P{inv.total.toLocaleString()} · {inv.period}
                                     </p>
                                 </div>
                                 <Button
@@ -561,7 +596,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
                         >
                             {(tenantRows ?? []).map((t) => (
                                 <option key={t.id} value={t.id}>
-                                    {t.name} - Unit {t.unit}
+                                    {t.name} - Unit {(t.units ?? []).map((u) => u.number).join(', ') || '-'}
                                 </option>
                             ))}
                         </Select>

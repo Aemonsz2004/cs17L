@@ -40,7 +40,7 @@ export default function TenantNavbar({
                         {user.name}
                     </p>
                     <p className="text-[10px] leading-tight text-[var(--rtms-muted)]">
-                        Unit {user.unit ?? '-'}
+                        {(user.tenant?.units ?? []).map((u) => u.number).join(', ') || '-'}
                     </p>
                 </div>
                 <Icon

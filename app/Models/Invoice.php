@@ -25,16 +25,20 @@ class Invoice extends Model
         'status',
         'reference',
         'confirmed_at',
+        'receipt_number',
+        'recorded_by_admin_id',
+        'payment_received_at',
     ];
 
     protected $casts = [
-        'due_date'  => 'date',
+        'due_date' => 'date',
         'paid_date' => 'date',
         'confirmed_at' => 'datetime',
-        'rent'      => 'integer',
+        'payment_received_at' => 'datetime',
+        'rent' => 'integer',
         'utilities' => 'integer',
-        'penalty'   => 'integer',
-        'total'     => 'integer',
+        'penalty' => 'integer',
+        'total' => 'integer',
     ];
 
     // ── Relationships ─────────────────────────────────────────────────────────
@@ -47,6 +51,11 @@ class Invoice extends Model
     public function lease(): BelongsTo
     {
         return $this->belongsTo(Lease::class);
+    }
+
+    public function recordedByAdmin(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'recorded_by_admin_id');
     }
 
     // ── Scopes ────────────────────────────────────────────────────────────────
@@ -66,6 +75,13 @@ class Invoice extends Model
             ->whereNull('confirmed_at');
     }
 
+    public function scopePendingCashPayment($query)
+    {
+        return $query->where('method', 'Cash')
+            ->where('status', 'due')
+            ->whereNull('payment_received_at');
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
@@ -82,6 +98,6 @@ class Invoice extends Model
 
         $num = (int) substr($last, 4) + 1;
 
-        return 'INV-' . str_pad($num, 3, '0', STR_PAD_LEFT);
+        return 'INV-'.str_pad($num, 3, '0', STR_PAD_LEFT);
     }
 }

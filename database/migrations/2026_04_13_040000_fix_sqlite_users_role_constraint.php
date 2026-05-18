@@ -37,7 +37,7 @@ return new class extends Migration
         $hasOtpCode = Schema::hasColumn('users', 'otp_code');
         $hasOtpExpiresAt = Schema::hasColumn('users', 'otp_expires_at');
 
-        $allowedRoles = "'" . implode("','", $roles) . "'";
+        $allowedRoles = "'".implode("','", $roles)."'";
 
         DB::statement('PRAGMA foreign_keys=OFF');
 

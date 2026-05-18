@@ -48,4 +48,20 @@ class Lease extends Model
     {
         return $this->hasMany(Invoice::class);
     }
+
+    // ── Computed Helpers ──────────────────────────────────────────────────────
+
+    public function isExpiring(): bool
+    {
+        return $this->end_date && now()->diffInDays($this->end_date, false) <= 30
+            && now()->diffInDays($this->end_date, false) > 0;
+    }
+
+    public function isOverdue(): bool
+    {
+        return $this->invoices()
+            ->whereIn('status', ['due', 'pending'])
+            ->where('due_date', '<', now())
+            ->exists();
+    }
 }

@@ -230,4 +230,33 @@ class ApplicationController extends Controller
 
         return $user;
     }
+
+    public function approve(Application $application)
+    {
+        DB::transaction(function () use ($application) {
+
+            $application->update([
+                'status' => 'approved',
+            ]);
+
+            $tenant = Tenant::create([
+                'user_id' => $application->user_id,
+                'unit_id' => $application->unit_id,
+                'status' => 'pending_payment',
+            ]);
+
+            Unit::where('id', $application->unit_id)
+                ->update([
+                    'status' => 'reserved',
+                ]);
+
+            Lease::create([
+                'tenant_id' => $tenant->id,
+                'unit_id' => $application->unit_id,
+                'status' => 'pending',
+                'start_date' => now(),
+                'end_date' => now()->addYear(),
+            ]);
+        });
+    }
 }

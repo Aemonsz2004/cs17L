@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\RentalApplication;
+use App\Models\Unit;
+use App\Support\ApplicationApprovalService;
 use App\Support\ApplicationWorkflowService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -62,15 +64,22 @@ class ApplicationReviewController extends Controller
         ]);
     }
 
-    public function approve(RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
+    public function approve(Request $request, RentalApplication $application, ApplicationApprovalService $approvalService): RedirectResponse
     {
+        $data = $request->validate([
+            'unit_id' => ['required', 'exists:units,id'],
+        ]);
+
+        $unit = Unit::findOrFail($data['unit_id']);
+
         try {
-            $workflow->approve($application, Auth::id());
+            $approvalService->approve($application, $unit, Auth::id());
         } catch (\RuntimeException $exception) {
             return redirect()->route('admin.applications.index')->with('error', $exception->getMessage());
         }
 
-        return redirect()->route('admin.applications.index')->with('success', 'Application approved and unit is now RESERVED. Send lease terms next.');
+        return redirect()->route('admin.applications.index')
+            ->with('success', 'Application approved. Tenant record created and deposit invoice generated.');
     }
 
     public function reject(Request $request, RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse

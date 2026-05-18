@@ -10,8 +10,7 @@ class TenantOtpService
 {
     public function __construct(
         private readonly MailConfigurationGuard $mailConfigurationGuard,
-    ) {
-    }
+    ) {}
 
     public function issue(User $user): void
     {

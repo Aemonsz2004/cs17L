@@ -190,7 +190,7 @@ return new class extends Migration
                 ? ['pending_review', 'approved', 'rejected', 'lease_sent', 'payment_pending', 'payment_paid', 'converted']
                 : ['pending_review', 'approved', 'rejected', 'lease_sent', 'lease_acknowledged', 'deposit_submitted', 'deposit_confirmed', 'converted'];
 
-            Schema::create($tempTable, function (Blueprint $table) use ($statuses, $forward): void {
+            Schema::create($tempTable, function (Blueprint $table) use ($statuses): void {
                 $table->id();
                 $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
                 $table->foreignId('unit_id')->constrained('units')->restrictOnDelete();
@@ -273,7 +273,7 @@ return new class extends Migration
                     'emergency_contact',
                     'government_id_path',
                     'income_proof_path',
-                    DB::raw($statusExpression . ' as status'),
+                    DB::raw($statusExpression.' as status'),
                     DB::raw('reserved_at'),
                     DB::raw('reservation_expires_at'),
                     'rejection_reason',
@@ -375,7 +375,7 @@ return new class extends Migration
                     'amount',
                     'currency',
                     'payment_method',
-                    DB::raw($statusExpression . ' as status'),
+                    DB::raw($statusExpression.' as status'),
                     'metadata',
                     'webhook_payload',
                     'paid_at',

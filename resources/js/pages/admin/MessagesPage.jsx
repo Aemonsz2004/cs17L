@@ -22,7 +22,7 @@ export default function MessagesPage({ messages = [] }) {
                     tenantId: message.tenant_id,
                     tenantName:
                         message.tenant?.name ?? 'Unknown Tenant',
-                    unit: message.tenant?.unit ?? '-',
+                    unit: (message.tenant?.units ?? []).map((u) => u.number).join(', ') || '-',
                     unread: unreadDelta,
                     lastAt: createdAt,
                 });

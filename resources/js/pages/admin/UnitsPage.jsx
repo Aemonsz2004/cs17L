@@ -13,8 +13,8 @@ const FLOORS = ['All', 'GF', '1F', '2F', '3F'];
 const statusBadge = (s) => {
     if (s === 'occupied') return <Badge variant="red">Occupied</Badge>;
     if (s === 'reserved') return <Badge variant="blue">Reserved</Badge>;
-    if (s === 'expiring') return <Badge variant="amber">Expiring</Badge>;
-    if (s === 'overdue') return <Badge variant="red">Overdue</Badge>;
+    if (s === 'maintenance') return <Badge variant="amber">Maintenance</Badge>;
+    if (s === 'pending') return <Badge variant="blue">Pending</Badge>;
     return <Badge variant="gray">Vacant</Badge>;
 };
 const floorLabel = {
@@ -26,8 +26,8 @@ const floorLabel = {
 const statusColor = {
     occupied: 'bg-red-50 border border-red-200 text-red-600',
     reserved: 'bg-blue-50 border border-blue-200 text-blue-700',
-    expiring: 'bg-amber-50 border border-amber-200 text-amber-700',
-    overdue: 'bg-red-50 border border-red-200 text-red-600',
+    maintenance: 'bg-amber-50 border border-amber-200 text-amber-700',
+    pending: 'bg-blue-50 border border-blue-200 text-blue-700',
     vacant: 'bg-[#FAF8F4] border border-dashed border-[#1B2B4B]/20 text-[#5C6B88]',
 };
 export default function UnitsPage({ openAddSignal = 0 }) {
@@ -48,6 +48,14 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         tenantId: unit.tenant_id,
         description: unit.description ?? '',
         gallery: unit.gallery ?? [],
+        unitHistories: (unit.unit_histories ?? []).map((h) => ({
+            id: h.id,
+            tenantId: h.tenant_id,
+            tenantName: h.tenant?.name ?? `Tenant #${h.tenant_id}`,
+            leaseId: h.lease_id,
+            startDate: h.start_date,
+            endDate: h.end_date,
+        })),
     }));
     const mappedArchivedUnits = (archivedUnitRows ?? []).map((unit) => ({
         id: unit.id,
@@ -61,6 +69,14 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         tenantId: unit.tenant_id,
         description: unit.description ?? '',
         gallery: unit.gallery ?? [],
+        unitHistories: (unit.unit_histories ?? []).map((h) => ({
+            id: h.id,
+            tenantId: h.tenant_id,
+            tenantName: h.tenant?.name ?? `Tenant #${h.tenant_id}`,
+            leaseId: h.lease_id,
+            startDate: h.start_date,
+            endDate: h.end_date,
+        })),
     }));
     const [units, setUnits] = useState(mappedUnits);
     const [archivedUnits, setArchivedUnits] = useState(mappedArchivedUnits);
@@ -120,7 +136,6 @@ export default function UnitsPage({ openAddSignal = 0 }) {
     }, [visibleUnits, floor, search]);
     const occupied = units.filter((u) => u.status !== 'vacant').length;
     const vacant = units.filter((u) => u.status === 'vacant').length;
-    const expiring = units.filter((u) => u.status === 'expiring').length;
     const occupancyPct =
         units.length > 0 ? Math.round((occupied / units.length) * 100) : 0;
     const tenant = selected?.tenantId
@@ -382,9 +397,9 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                     iconBg="bg-red-50 text-red-400"
                 />
                 <MetricCard
-                    label="Expiring Soon"
-                    value={expiring}
-                    sub="Within 30 days"
+                    label="Maintenance"
+                    value={units.filter((u) => u.status === 'maintenance').length}
+                    sub="Under maintenance"
                     trend="down"
                     iconBg="bg-amber-50 text-amber-500"
                 />
@@ -625,6 +640,34 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                             </p>
                         </div>
                     )}
+
+                    {(selected.unitHistories ?? []).length > 0 && (
+                        <div className="mt-5">
+                            <p className="mb-2 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
+                                Unit History
+                            </p>
+                            <div className="max-h-56 space-y-2 overflow-y-auto rounded-xl border border-[#1B2B4B]/8 bg-[#FAF8F4] p-3">
+                                {[...(selected.unitHistories ?? [])]
+                                    .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
+                                    .map((h) => (
+                                        <div
+                                            key={h.id}
+                                            className="flex items-center justify-between rounded-lg border border-[#1B2B4B]/6 bg-white px-3 py-2"
+                                        >
+                                            <div>
+                                                <p className="text-sm font-medium text-[#1B2B4B]">
+                                                    {h.tenantName}
+                                                </p>
+                                                <p className="text-xs text-[#5C6B88]">
+                                                    {formatDateDisplay(h.startDate)}
+                                                    {h.endDate ? ` – ${formatDateDisplay(h.endDate)}` : ' – Present'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
                 </Modal>
             )}
 
@@ -708,10 +751,11 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                         }
                         full
                     >
-                        <option value="vacant">Vacant</option>
-                        <option value="occupied">Occupied</option>
-                        <option value="expiring">Expiring</option>
-                        <option value="overdue">Overdue</option>
+                            <option value="vacant">Vacant</option>
+                            <option value="occupied">Occupied</option>
+                            <option value="maintenance">Under Maintenance</option>
+                            <option value="pending">Pending</option>
+                            <option value="reserved">Reserved</option>
                     </Select>
                     <div className="col-span-1">
                         <Input
@@ -986,8 +1030,9 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                         >
                             <option value="vacant">Vacant</option>
                             <option value="occupied">Occupied</option>
-                            <option value="expiring">Expiring</option>
-                            <option value="overdue">Overdue</option>
+                            <option value="maintenance">Under Maintenance</option>
+                            <option value="pending">Pending</option>
+                            <option value="reserved">Reserved</option>
                         </Select>
                     </div>
                 </Modal>

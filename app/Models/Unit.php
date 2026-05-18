@@ -3,9 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Unit extends Model
 {
@@ -17,6 +17,7 @@ class Unit extends Model
         'type',
         'area',
         'base_rent',
+        'deposit_amount',
         'status',
         'tenant_id',
         'reserved_until',
@@ -25,8 +26,9 @@ class Unit extends Model
     ];
 
     protected $casts = [
-        'area'      => 'integer',
+        'area' => 'integer',
         'base_rent' => 'integer',
+        'deposit_amount' => 'integer',
         'reserved_until' => 'datetime',
         'gallery' => 'array',
     ];
@@ -53,9 +55,32 @@ class Unit extends Model
         return $this->hasMany(RentalApplication::class);
     }
 
+    public function unitHistories(): HasMany
+    {
+        return $this->hasMany(UnitHistory::class);
+    }
+
+    // ── Scopes ────────────────────────────────────────────────────────────────
+
+    public function scopePubliclyVisible($query)
+    {
+        return $query->where('status', 'vacant');
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    public function isVacant(): bool { return $this->status === 'vacant'; }
+    public function isVacant(): bool
+    {
+        return $this->status === 'vacant';
+    }
 
-    public function isReserved(): bool { return $this->status === 'reserved'; }
+    public function isReserved(): bool
+    {
+        return $this->status === 'reserved';
+    }
+
+    public function getDepositAmount(): int
+    {
+        return $this->deposit_amount ?? ($this->base_rent * 2);
+    }
 }

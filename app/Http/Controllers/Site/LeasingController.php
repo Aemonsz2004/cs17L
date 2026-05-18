@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
 use App\Models\Unit;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -16,7 +17,7 @@ class LeasingController extends Controller
         if (Auth::check()) {
             $user = Auth::user();
 
-            if ($user instanceof \App\Models\User) {
+            if ($user instanceof User) {
                 if ($user->isAdmin()) {
                     return redirect()->route('admin.dashboard');
                 }
@@ -33,7 +34,7 @@ class LeasingController extends Controller
             return redirect()->route('login');
         }
 
-        $units = Unit::where('status', 'vacant')
+        $units = Unit::publiclyVisible()
             ->orderBy('floor')
             ->orderBy('number')
             ->limit(6)
@@ -47,7 +48,7 @@ class LeasingController extends Controller
 
     public function units(): Response
     {
-        $units = Unit::where('status', 'vacant')
+        $units = Unit::publiclyVisible()
             ->orderBy('floor')
             ->orderBy('number')
             ->get();
@@ -60,6 +61,10 @@ class LeasingController extends Controller
 
     public function show(Unit $unit): Response
     {
+        if (! Auth::check()) {
+            abort_unless($unit->status === 'vacant', 404);
+        }
+
         return Inertia::render('public/UnitShow', [
             'property' => $this->propertyData(),
             'unit' => $this->mapUnit($unit),
@@ -113,7 +118,7 @@ class LeasingController extends Controller
                 'Floor' => $unit->floor,
                 'Type' => $unit->type,
                 'Size (sqm)' => (string) $unit->area,
-                'Monthly Rate' => 'P' . number_format((int) $unit->base_rent),
+                'Monthly Rate' => 'P'.number_format((int) $unit->base_rent),
             ],
         ];
     }

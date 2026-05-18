@@ -1,8 +1,10 @@
 <?php
+
 // app/Http/Middleware/TenantMiddleware.php
 
 namespace App\Http\Middleware;
 
+use App\Models\Tenant;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,11 +16,11 @@ class TenantMiddleware
      * Admins are redirected to the admin dashboard.
      *
      * Also enforces that the authenticated tenant can only
-        * access routes scoped to their own tenant_id.
-        *
-        * Login security flow:
-        * 1) Newly created tenant must set a new password first.
-        * 2) After password setup, tenant must verify OTP per login session.
+     * access routes scoped to their own tenant_id.
+     *
+     * Login security flow:
+     * 1) Newly created tenant must set a new password first.
+     * 2) After password setup, tenant must verify OTP per login session.
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -62,7 +64,7 @@ class TenantMiddleware
         // Ownership check — if a route has a {tenant} parameter,
         // make sure the authenticated user owns that tenant record.
         if ($request->route('tenant')) {
-            $routeTenantId = $request->route('tenant') instanceof \App\Models\Tenant
+            $routeTenantId = $request->route('tenant') instanceof Tenant
                 ? $request->route('tenant')->id
                 : (int) $request->route('tenant');
 

@@ -15,7 +15,6 @@ function makeTenant(array $overrides = []): Tenant
         'contact' => 'Tenant Contact',
         'phone' => '09120000001',
         'email' => 'tenant-a@example.com',
-        'unit' => '101',
         'floor' => '1F',
         'type' => 'Office',
         'rent' => 9000,
@@ -69,7 +68,7 @@ it('allows admin to open main admin pages', function () {
 it('runs full admin tenant crud', function () {
     $admin = makeAdmin();
 
-    Unit::create([
+    $unit = Unit::create([
         'number' => '102',
         'floor' => '1F',
         'type' => 'Retail',
@@ -86,11 +85,7 @@ it('runs full admin tenant crud', function () {
             'contact' => 'Contact B',
             'phone' => '09120000002',
             'email' => 'tenant-b@example.com',
-            'unit' => '102',
-            'floor' => '1F',
-            'type' => 'Retail',
-            'rent' => 8000,
-            'deposit' => 16000,
+            'unit_id' => $unit->id,
             'lease_start' => '2026-01-01',
             'lease_end' => '2026-12-31',
             'payment_method' => 'Cash',
@@ -105,13 +100,13 @@ it('runs full admin tenant crud', function () {
     $this->actingAs($admin)
         ->patch(route('admin.tenants.update', $tenant), [
             'phone' => '09120000099',
-            'status' => 'expiring',
+            'status' => 'active',
         ])
         ->assertRedirect(route('admin.tenants.index'));
 
     $tenant->refresh();
     expect($tenant->phone)->toBe('09120000099');
-    expect($tenant->status)->toBe('expiring');
+    expect($tenant->status)->toBe('active');
 
     $this->actingAs($admin)
         ->delete(route('admin.tenants.destroy', $tenant))

@@ -33,10 +33,10 @@ class HandleInertiaRequests extends Middleware
             // Authenticated user — available as $page.props.auth.user
             'auth' => [
                 'user' => $request->user() ? [
-                    'id'        => $request->user()->id,
-                    'name'      => $request->user()->name,
-                    'email'     => $request->user()->email,
-                    'role'      => $request->user()->role,
+                    'id' => $request->user()->id,
+                    'name' => $request->user()->name,
+                    'email' => $request->user()->email,
+                    'role' => $request->user()->role,
                     'tenant_id' => $request->user()->tenant_id,
                 ] : null,
             ],
@@ -44,7 +44,7 @@ class HandleInertiaRequests extends Middleware
             // Flash messages from redirect()->with('success', '...') or with('error', '...')
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
-                'error'   => fn () => $request->session()->get('error'),
+                'error' => fn () => $request->session()->get('error'),
                 'tenant_credentials' => fn () => $request->session()->get('tenant_credentials'),
             ],
 

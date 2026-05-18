@@ -1,6 +1,8 @@
 // src/components/layout/MainLayout.jsx
+import { usePage } from '@inertiajs/react';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
+import FlashMessage from './FlashMessage';
 export default function MainLayout({
     navSections,
     activeId,
@@ -12,8 +14,11 @@ export default function MainLayout({
     onNotifClick,
     children,
 }) {
+    const { props } = usePage();
     return (
         <div className="flex h-screen w-screen overflow-hidden bg-[var(--rtms-bg)] font-sans">
+            <FlashMessage message={props.success} type="success" />
+            <FlashMessage message={props.error} type="error" />
             {/* Sidebar */}
             <Sidebar
                 navSections={navSections}

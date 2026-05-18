@@ -13,11 +13,17 @@ class RentalApplication extends Model
     use SoftDeletes;
 
     public const STATUS_PENDING_REVIEW = 'pending_review';
+
     public const STATUS_APPROVED = 'approved';
+
     public const STATUS_REJECTED = 'rejected';
+
     public const STATUS_LEASE_SENT = 'lease_sent';
+
     public const STATUS_PAYMENT_PENDING = 'payment_pending';
+
     public const STATUS_PAYMENT_PAID = 'payment_paid';
+
     public const STATUS_CONVERTED = 'converted';
 
     protected $fillable = [

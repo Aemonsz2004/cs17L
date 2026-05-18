@@ -6,6 +6,7 @@ import Card from '../../components/Card';
 import MetricCard from '../../components/MetricCard';
 import Table from '../../components/Table';
 import { formatDateDisplay } from '../../lib/date';
+const EXPIRING_SOON_DAYS = 30;
 const statusBadge = (status) => {
     if (status === 'paid') return <Badge variant="green">Paid</Badge>;
     if (status === 'due') return <Badge variant="amber">Due</Badge>;
@@ -68,12 +69,14 @@ export default function DashboardPage({ onNavigate }) {
                     label="Occupancy Rate"
                     value={`${metrics.occupancyPct}%`}
                     sub={`${metrics.occupied} of ${metrics.totalUnits} units`}
+                    onClick={() => onNavigate?.('units')}
                 />
                 <MetricCard
                     label="Collected"
                     value={`P${metrics.collected.toLocaleString()}`}
                     sub="Paid invoices"
                     trend="up"
+                    onClick={() => onNavigate?.('billing')}
                 />
                 <MetricCard
                     label="Pending"
@@ -81,12 +84,14 @@ export default function DashboardPage({ onNavigate }) {
                     sub="Due and overdue invoices"
                     trend="down"
                     iconBg="bg-amber-50 text-amber-500"
+                    onClick={() => onNavigate?.('billing')}
                 />
                 <MetricCard
                     label="Open Requests"
                     value={metrics.openRequests}
                     sub="Maintenance requests"
                     iconBg="bg-[#1B2B4B]/8 text-[#5C6B88]"
+                    onClick={() => onNavigate?.('maintenance')}
                 />
             </div>
 
@@ -189,15 +194,21 @@ export default function DashboardPage({ onNavigate }) {
                     }
                 />
                 <Card.Body flush>
-                    {tenants.filter((tenant) => tenant.status === 'expiring')
-                        .length === 0 ? (
-                        <div className="p-5 text-sm text-[#5C6B88]">
-                            No expiring leases right now.
-                        </div>
-                    ) : (
-                        tenants
-                            .filter((tenant) => tenant.status === 'expiring')
-                            .map((tenant) => (
+                    {(() => {
+                        const expiringSoon = tenants.filter((t) => {
+                            if (t.status !== 'active') return false;
+                            const end = new Date(t.lease_end);
+                            const diff = Math.ceil(
+                                (end - new Date()) / (1000 * 60 * 60 * 24),
+                            );
+                            return diff > 0 && diff <= EXPIRING_SOON_DAYS;
+                        });
+                        return expiringSoon.length === 0 ? (
+                            <div className="p-5 text-sm text-[#5C6B88]">
+                                No expiring leases right now.
+                            </div>
+                        ) : (
+                            expiringSoon.map((tenant) => (
                                 <div
                                     key={tenant.id}
                                     className="flex items-center justify-between border-b border-[#1B2B4B]/5 px-5 py-3.5 last:border-0"
@@ -207,7 +218,7 @@ export default function DashboardPage({ onNavigate }) {
                                             {tenant.name}
                                         </p>
                                         <p className="text-xs text-[#5C6B88]">
-                                            Unit {tenant.unit} · Ends{' '}
+                                            Unit {(tenant.units ?? []).map((u) => u.number).join(', ')} · Ends{' '}
                                             {formatDateDisplay(
                                                 tenant.lease_end,
                                             )}
@@ -216,7 +227,8 @@ export default function DashboardPage({ onNavigate }) {
                                     <Badge variant="amber">Expiring</Badge>
                                 </div>
                             ))
-                    )}
+                        );
+                    })()}
                 </Card.Body>
             </Card>
         </div>

@@ -27,17 +27,17 @@ const addDaysToDateInput = (value, days) => {
 
 const statusBadge = (s) => {
     if (s === 'active') return <Badge variant="green">Active</Badge>;
-    if (s === 'expiring') return <Badge variant="amber">Expiring</Badge>;
-    if (s === 'overdue') return <Badge variant="red">Overdue</Badge>;
+    if (s === 'pending_payment') return <Badge variant="amber">Pending Payment</Badge>;
+    if (s === 'moved_out') return <Badge variant="gray">Moved Out</Badge>;
+    if (s === 'terminated') return <Badge variant="red">Terminated</Badge>;
     return null;
 };
 
 const leaseStatusBadge = (status) => {
     if (status === 'active') return <Badge variant="green">Active</Badge>;
-    if (status === 'expiring') return <Badge variant="amber">Expiring</Badge>;
-    if (status === 'overdue') return <Badge variant="red">Overdue</Badge>;
     if (status === 'ended') return <Badge variant="gray">Ended</Badge>;
-    if (status === 'terminated') return <Badge variant="red">Terminated</Badge>;
+    if (status === 'expired') return <Badge variant="red">Expired</Badge>;
+    if (status === 'pending') return <Badge variant="amber">Pending</Badge>;
     return <Badge variant="gray">{status ?? 'Unknown'}</Badge>;
 };
 
@@ -57,14 +57,23 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         units: unitRows,
         flash,
     } = usePage().props;
-    const mappedTenants = (tenantRows ?? []).map((tenant) => ({
+    const mapTenant = (tenant) => {
+        const mappedUnits = (tenant.units ?? []).map((u) => ({
+            id: u.id,
+            number: u.number,
+            floor: u.floor,
+            type: u.type,
+            baseRent: u.base_rent,
+            status: u.status,
+        }));
+        return {
         id: tenant.id,
         name: tenant.name,
         initials: tenant.initials,
         contact: tenant.contact,
         phone: tenant.phone,
         email: tenant.email,
-        unit: tenant.unit,
+        unit: mappedUnits.map((u) => u.number).join(', '),
         floor: tenant.floor,
         type: tenant.type,
         rent: tenant.rent,
@@ -73,8 +82,10 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         leaseEnd: tenant.lease_end,
         paymentMethod: tenant.payment_method,
         status: tenant.status,
+        units: mappedUnits,
         leases: (tenant.leases ?? []).map((lease) => ({
             id: lease.id,
+            unitId: lease.unit_id,
             startDate: lease.start_date,
             endDate: lease.end_date,
             rent: lease.rent,
@@ -84,35 +95,9 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             endedAt: lease.ended_at,
             terms: lease.terms,
         })),
-    }));
-    const mappedArchivedTenants = (archivedTenantRows ?? []).map((tenant) => ({
-        id: tenant.id,
-        name: tenant.name,
-        initials: tenant.initials,
-        contact: tenant.contact,
-        phone: tenant.phone,
-        email: tenant.email,
-        unit: tenant.unit,
-        floor: tenant.floor,
-        type: tenant.type,
-        rent: tenant.rent,
-        deposit: tenant.deposit,
-        leaseStart: tenant.lease_start,
-        leaseEnd: tenant.lease_end,
-        paymentMethod: tenant.payment_method,
-        status: tenant.status,
-        leases: (tenant.leases ?? []).map((lease) => ({
-            id: lease.id,
-            startDate: lease.start_date,
-            endDate: lease.end_date,
-            rent: lease.rent,
-            deposit: lease.deposit,
-            paymentMethod: lease.payment_method,
-            status: lease.status,
-            endedAt: lease.ended_at,
-            terms: lease.terms,
-        })),
-    }));
+    }};
+    const mappedTenants = (tenantRows ?? []).map(mapTenant);
+    const mappedArchivedTenants = (archivedTenantRows ?? []).map(mapTenant);
     const availableUnits = (unitRows ?? []).filter(
         (unit) => unit.status === 'vacant' && unit.tenant_id === null,
     );
@@ -134,10 +119,7 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         contact: '',
         phone: '',
         email: '',
-        unit: defaultUnit?.number ?? '',
-        floor: defaultUnit?.floor ?? 'GF',
-        type: defaultUnit?.type ?? 'Office',
-        rent: String(defaultUnit?.base_rent ?? ''),
+        unit_id: defaultUnit?.id ?? '',
         paymentMethod: 'GCash',
         leaseStart: '',
         leaseEnd: '',
@@ -153,6 +135,14 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         terms: '',
     });
     const [renewErrors, setRenewErrors] = useState({});
+    const [moveOutOpen, setMoveOutOpen] = useState(false);
+    const [moveOutForm, setMoveOutForm] = useState({
+        reason: '',
+        notes: '',
+        damages: '',
+        balanceDue: '0',
+    });
+    const [moveOutErrors, setMoveOutErrors] = useState({});
     const lastHandledSignal = useRef(openAddSignal);
     const credentials = flash?.tenant_credentials ?? null;
     const currentCredentialKey = credentials
@@ -184,11 +174,12 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             setDetailOpen(false);
             setEditOpen(false);
             setRenewOpen(false);
+            setMoveOutOpen(false);
         }
     }, [viewMode]);
     useEffect(() => {
         const current = availableUnits.find(
-            (unit) => unit.number === addForm.unit,
+            (unit) => String(unit.id) === String(addForm.unit_id),
         );
         if (current) {
             return;
@@ -196,12 +187,9 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         const first = availableUnits[0];
         setAddForm((prev) => ({
             ...prev,
-            unit: first?.number ?? '',
-            floor: first?.floor ?? 'GF',
-            type: first?.type ?? 'Office',
-            rent: String(first?.base_rent ?? ''),
+            unit_id: first?.id ?? '',
         }));
-    }, [unitRows, availableUnits, addForm.unit]);
+    }, [unitRows, availableUnits, addForm.unit_id]);
     useEffect(() => {
         if (openAddSignal !== lastHandledSignal.current) {
             setAddOpen(true);
@@ -212,9 +200,9 @@ export default function TenantsPage({ openAddSignal = 0 }) {
     const filtered = visibleTenants.filter((t) => {
         const matchSearch =
             t.name.toLowerCase().includes(search.toLowerCase()) ||
-            String(t.unit ?? '')
-                .toLowerCase()
-                .includes(search.toLowerCase());
+            (t.units ?? []).some((u) =>
+                u.number.toLowerCase().includes(search.toLowerCase()),
+            );
         const matchStatus = filterStatus === 'all' || t.status === filterStatus;
         return matchSearch && matchStatus;
     });
@@ -246,10 +234,13 @@ export default function TenantsPage({ openAddSignal = 0 }) {
               return right - left;
           })
         : [];
+    const currentUnitIds = new Set(
+        (selected?.units ?? []).map((u) => u.id),
+    );
     const transferUnitOptions = selected
         ? (unitRows ?? []).filter(
               (unit) =>
-                  unit.number === selected.unit ||
+                  currentUnitIds.has(unit.id) ||
                   (unit.status === 'vacant' && unit.tenant_id === null),
           )
         : [];
@@ -339,14 +330,13 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         },
     ];
     const active = tenants.filter((t) => t.status === 'active').length;
-    const expiring = tenants.filter((t) => t.status === 'expiring').length;
-    const overdue = tenants.filter((t) => t.status === 'overdue').length;
+    const pendingPayment = tenants.filter((t) => t.status === 'pending_payment').length;
     const saveTenant = () => {
         if (
             !addForm.name ||
             !addForm.contact ||
             !addForm.email ||
-            !addForm.unit ||
+            !addForm.unit_id ||
             !addForm.leaseStart ||
             !addForm.leaseEnd
         ) {
@@ -369,11 +359,7 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             contact: addForm.contact,
             phone: addForm.phone || 'N/A',
             email: addForm.email,
-            unit: addForm.unit,
-            floor: addForm.floor,
-            type: addForm.type,
-            rent: Number(addForm.rent || 0),
-            deposit: Number(addForm.rent || 0) * 2,
+            unit_id: Number(addForm.unit_id),
             lease_start: addForm.leaseStart,
             lease_end: addForm.leaseEnd,
             payment_method: addForm.paymentMethod,
@@ -384,7 +370,7 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         if (!selected) return;
         setEditForm({
             ...selected,
-            unit: selected.unit,
+            unit_id: selected.units?.[0]?.id ?? '',
         });
         setEditOpen(true);
     };
@@ -397,11 +383,17 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             contact: editForm.contact,
             phone: editForm.phone,
             email: editForm.email,
-            unit: editForm.unit,
+            unit_id: editForm.unit_id ? Number(editForm.unit_id) : undefined,
             payment_method: editForm.paymentMethod,
             status: editForm.status,
         });
     };
+    const closeMoveOut = () => {
+        setMoveOutOpen(false);
+        setMoveOutForm({ reason: '', notes: '', damages: '', balanceDue: '0' });
+        setMoveOutErrors({});
+    };
+
     const openRenew = () => {
         if (!selected) return;
         const latestLease = selectedLeases[0] ?? null;
@@ -420,6 +412,48 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         });
         setRenewOpen(true);
     };
+
+    const saveMoveOut = () => {
+        if (!selected) return;
+
+        const nextErrors = {};
+        if (!moveOutForm.reason.trim()) {
+            nextErrors.reason = 'Reason is required.';
+        }
+
+        if (Object.keys(nextErrors).length > 0) {
+            setMoveOutErrors(nextErrors);
+            return;
+        }
+
+        if (!window.confirm(`Confirm move-out for ${selected.name}? This will end all leases and free all units.`)) {
+            return;
+        }
+
+        setMoveOutErrors({});
+
+        router.post(`/admin/tenants/${selected.id}/move-out`, {
+            reason: moveOutForm.reason.trim(),
+            notes: moveOutForm.notes.trim() || null,
+            damages: moveOutForm.damages.trim() || null,
+            balance_due: Number(moveOutForm.balanceDue || 0),
+        }, {
+            onError: (errors) => {
+                setMoveOutErrors({
+                    reason: errors.reason,
+                    notes: errors.notes,
+                    damages: errors.damages,
+                    balanceDue: errors.balance_due,
+                    general: Object.values(errors).join(', '),
+                });
+            },
+            onSuccess: () => {
+                setMoveOutOpen(false);
+                setMoveOutForm({ reason: '', notes: '', damages: '', balanceDue: '0' });
+            },
+        });
+    };
+
     const saveRenew = () => {
         if (!selected) return;
 
@@ -507,11 +541,10 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     },
                     { label: 'Active', count: active, color: 'text-[#1D7B6E]' },
                     {
-                        label: 'Expiring',
-                        count: expiring,
+                        label: 'Pending',
+                        count: pendingPayment,
                         color: 'text-amber-600',
                     },
-                    { label: 'Overdue', count: overdue, color: 'text-red-500' },
                 ].map((s) => (
                     <div
                         key={s.label}
@@ -579,8 +612,7 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     >
                         <option value="all">All Status</option>
                         <option value="active">Active</option>
-                        <option value="expiring">Expiring</option>
-                        <option value="overdue">Overdue</option>
+                        <option value="pending_payment">Pending Payment</option>
                     </Select>
                 </div>
 
@@ -624,6 +656,12 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             </Button>
                             <Button
                                 variant="danger"
+                                onClick={() => setMoveOutOpen(true)}
+                            >
+                                Move Out
+                            </Button>
+                            <Button
+                                variant="danger"
                                 onClick={() => archiveTenant(selected.id)}
                             >
                                 Archive Tenant
@@ -642,12 +680,27 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                                 {selected.name}
                             </h3>
                             <p className="text-sm text-[#5C6B88]">
-                                Unit {selected.unit} · {selected.floor} ·{' '}
-                                {selected.type}
+                                {selected.units && selected.units.length > 0
+                                    ? selected.units.map((u) => `Unit ${u.number} (${u.floor} - ${u.type})`).join(', ')
+                                    : `Unit ${selected.unit} · ${selected.floor} · ${selected.type}`}
                             </p>
                         </div>
                         {statusBadge(selected.status)}
                     </div>
+                    {selected.units && selected.units.length > 1 && (
+                        <div className="mb-4 rounded-xl border border-[#1B2B4B]/12 bg-[#F7FAFF] px-4 py-3">
+                            <p className="text-xs font-semibold tracking-wider text-[#5C6B88] uppercase">
+                                Occupied Units ({selected.units.length})
+                            </p>
+                            <div className="mt-2 space-y-1">
+                                {selected.units.map((u) => (
+                                    <p key={u.id} className="text-sm text-[#1B2B4B]">
+                                        Unit {u.number} · {u.floor} · {u.type} · P{Number(u.baseRent).toLocaleString()}/mo · {u.status}
+                                    </p>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-6">
                         <div>
@@ -656,8 +709,10 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             </p>
                             <InfoRow label="Contact" value={selected.contact} />
                             <InfoRow
-                                label="Occupied Unit"
-                                value={`Unit ${selected.unit} (${selected.floor})`}
+                                label="Occupied Units"
+                                value={selected.units && selected.units.length > 0
+                                    ? selected.units.map((u) => `Unit ${u.number} (${u.floor} - ${u.type})`).join(', ')
+                                    : selected.unit || 'N/A'}
                             />
                             <InfoRow label="Phone" value={selected.phone} />
                             <InfoRow label="Email" value={selected.email} />
@@ -991,17 +1046,11 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     />
                     <Select
                         label="Unit (Available Only)"
-                        value={addForm.unit}
+                        value={String(addForm.unit_id)}
                         onChange={(e) => {
-                            const nextUnit = availableUnits.find(
-                                (unit) => unit.number === e.target.value,
-                            );
                             setAddForm((f) => ({
                                 ...f,
-                                unit: e.target.value,
-                                floor: nextUnit?.floor ?? f.floor,
-                                type: nextUnit?.type ?? f.type,
-                                rent: String(nextUnit?.base_rent ?? f.rent),
+                                unit_id: e.target.value,
                             }));
                         }}
                         full
@@ -1010,28 +1059,11 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             <option value="">No available units</option>
                         )}
                         {availableUnits.map((unit) => (
-                            <option key={unit.id} value={unit.number}>
+                            <option key={unit.id} value={String(unit.id)}>
                                 {unit.number} · {unit.floor} · {unit.type}
                             </option>
                         ))}
                     </Select>
-                    <Input label="Floor" value={addForm.floor} readOnly full />
-                    <Input
-                        label="Unit Type"
-                        value={addForm.type}
-                        readOnly
-                        full
-                    />
-                    <Input
-                        label="Monthly Rent"
-                        placeholder="0.00"
-                        type="number"
-                        value={addForm.rent}
-                        onChange={(e) =>
-                            setAddForm((f) => ({ ...f, rent: e.target.value }))
-                        }
-                        full
-                    />
                     <Select
                         label="Payment Method"
                         value={addForm.paymentMethod}
@@ -1110,17 +1142,17 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     <div className="grid grid-cols-2 gap-4">
                         <Select
                             label="Unit"
-                            value={String(editForm.unit ?? '')}
+                            value={String(editForm.unit_id ?? '')}
                             onChange={(e) =>
                                 setEditForm((f) => ({
                                     ...f,
-                                    unit: e.target.value,
+                                    unit_id: e.target.value,
                                 }))
                             }
                             full
                         >
                             {transferUnitOptions.map((unit) => (
-                                <option key={unit.id} value={unit.number}>
+                                <option key={unit.id} value={String(unit.id)}>
                                     {unit.number} · {unit.floor} · {unit.type}
                                 </option>
                             ))}
@@ -1185,9 +1217,92 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             full
                         >
                             <option value="active">Active</option>
-                            <option value="expiring">Expiring</option>
-                            <option value="overdue">Overdue</option>
+                            <option value="pending_payment">Pending Payment</option>
+                            <option value="moved_out">Moved Out</option>
+                            <option value="terminated">Terminated</option>
                         </Select>
+                    </div>
+                </Modal>
+            )}
+
+            {selected && (
+                <Modal
+                    open={moveOutOpen}
+                    onClose={() => setMoveOutOpen(false)}
+                    title="Move Out Tenant"
+                    size="md"
+                    footer={
+                        <>
+                            <Button
+                                variant="ghost"
+                                onClick={closeMoveOut}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="danger"
+                                onClick={saveMoveOut}
+                            >
+                                Confirm Move Out
+                            </Button>
+                        </>
+                    }
+                >
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                        <p className="text-sm font-semibold text-red-700">
+                            Moving out {selected.name}
+                        </p>
+                        <p className="mt-1 text-xs text-red-600">
+                            This will end all active leases, free all assigned units, create move-out records, and soft-delete the tenant. This action cannot be undone.
+                        </p>
+                    </div>
+
+                    {moveOutErrors.general && (
+                        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {moveOutErrors.general}
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 gap-4">
+                        <Input
+                            label="Reason *"
+                            placeholder="e.g. Lease ended, eviction, voluntary move-out"
+                            value={moveOutForm.reason}
+                            onChange={(e) => {
+                                setMoveOutForm((f) => ({ ...f, reason: e.target.value }));
+                                setMoveOutErrors((prev) => ({ ...prev, reason: undefined }));
+                            }}
+                            error={moveOutErrors.reason}
+                            full
+                        />
+                        <Input
+                            label="Notes"
+                            placeholder="Additional notes about the move-out"
+                            value={moveOutForm.notes}
+                            onChange={(e) =>
+                                setMoveOutForm((f) => ({ ...f, notes: e.target.value }))
+                            }
+                            full
+                        />
+                        <Input
+                            label="Damages"
+                            placeholder="Describe any damages to the unit"
+                            value={moveOutForm.damages}
+                            onChange={(e) =>
+                                setMoveOutForm((f) => ({ ...f, damages: e.target.value }))
+                            }
+                            full
+                        />
+                        <Input
+                            label="Balance Due (₱)"
+                            type="number"
+                            placeholder="0"
+                            value={moveOutForm.balanceDue}
+                            onChange={(e) =>
+                                setMoveOutForm((f) => ({ ...f, balanceDue: e.target.value }))
+                            }
+                            full
+                        />
                     </div>
                 </Modal>
             )}

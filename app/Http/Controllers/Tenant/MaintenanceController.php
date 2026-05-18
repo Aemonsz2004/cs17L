@@ -39,10 +39,11 @@ class MaintenanceController extends Controller
 
         $user = $request->user();
         $tenant = $user->tenant;
+        $unitNumber = $tenant?->units()->value('number') ?? 'N/A';
 
         $created = MaintenanceRequest::create([
             'title' => $data['title'],
-            'unit' => $tenant?->unit ?? 'N/A',
+            'unit' => $unitNumber,
             'tenant' => $tenant?->name ?? $user->name,
             'tenant_id' => $user->tenant_id,
             'type' => $data['type'],
@@ -54,7 +55,7 @@ class MaintenanceController extends Controller
         RtmsNotification::create([
             'variant' => 'amber',
             'category' => 'maintenance',
-            'message' => sprintf('New maintenance request from %s (%s): %s', $created->tenant, $created->unit, $created->title),
+            'message' => sprintf('New maintenance request from %s (%s): %s', $created->tenant, $unitNumber, $created->title),
             'tenant_id' => null,
             'unread' => true,
         ]);

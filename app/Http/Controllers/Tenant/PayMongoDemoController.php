@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
-use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,7 +28,7 @@ class PayMongoDemoController extends Controller
 
         $this->assertInvoiceMatchesUnit($invoice);
 
-        $intentId = 'pi_demo_' . Str::lower(Str::random(16));
+        $intentId = 'pi_demo_'.Str::lower(Str::random(16));
 
         $intent = [
             'id' => $intentId,
@@ -41,7 +40,7 @@ class PayMongoDemoController extends Controller
             'status' => 'awaiting_payment_method',
             'created_at' => now()->toIso8601String(),
             'expires_at' => now()->addMinutes(15)->toIso8601String(),
-            'checkout_url' => 'https://demo.paymongo.local/checkout/' . $intentId,
+            'checkout_url' => 'https://demo.paymongo.local/checkout/'.$intentId,
         ];
 
         Cache::put($this->cacheKey($intentId), $intent, now()->addMinutes(20));
@@ -56,7 +55,7 @@ class PayMongoDemoController extends Controller
                     'status' => $intent['status'],
                     'payment_method_allowed' => [$intent['channel']],
                     'capture_type' => 'automatic',
-                    'client_key' => 'pk_test_demo_' . Str::lower(Str::random(12)),
+                    'client_key' => 'pk_test_demo_'.Str::lower(Str::random(12)),
                     'next_action' => [
                         'type' => 'redirect',
                         'redirect' => [
@@ -101,7 +100,7 @@ class PayMongoDemoController extends Controller
 
         $intent['status'] = 'succeeded';
         $intent['paid_at'] = now()->toIso8601String();
-        $intent['source_id'] = 'src_demo_' . Str::lower(Str::random(14));
+        $intent['source_id'] = 'src_demo_'.Str::lower(Str::random(14));
 
         Cache::put($this->cacheKey($intentId), $intent, now()->addMinutes(20));
 
@@ -120,7 +119,7 @@ class PayMongoDemoController extends Controller
 
     private function cacheKey(string $intentId): string
     {
-        return 'paymongo_demo:intent:' . $intentId;
+        return 'paymongo_demo:intent:'.$intentId;
     }
 
     private function tenantUser(mixed $user): User
@@ -140,14 +139,8 @@ class PayMongoDemoController extends Controller
             ]);
         }
 
-        $invoice->loadMissing('tenant');
-        $unitNumber = $invoice->tenant?->unit;
-
-        if (! $unitNumber) {
-            return;
-        }
-
-        $baseRent = Unit::where('number', $unitNumber)->value('base_rent');
+        $invoice->loadMissing(['lease.unit']);
+        $baseRent = $invoice->lease?->unit?->base_rent;
 
         if ($baseRent !== null && (int) $invoice->rent !== (int) $baseRent) {
             throw ValidationException::withMessages([

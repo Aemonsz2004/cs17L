@@ -1,19 +1,24 @@
 <?php
 
+use App\Http\Middleware\AdminMiddleware;
+use App\Http\Middleware\ApplicantMiddleware;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\TenantMiddleware;
 use App\Models\RtmsNotification;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web:      __DIR__ . '/../routes/web.php',
-        commands: __DIR__ . '/../routes/console.php',
-        health:   '/up',
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
         then: function () {
             // Explicit route model binding:
             // {notification} in routes/web.php resolves to RtmsNotification
-            \Illuminate\Support\Facades\Route::model(
+            Route::model(
                 'notification',
                 RtmsNotification::class,
             );
@@ -22,7 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         // Inertia middleware runs on every web request
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
+            HandleInertiaRequests::class,
         ]);
 
         // External payment providers (PayMongo) cannot send CSRF tokens.
@@ -32,9 +37,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Named middleware aliases used in routes/web.php
         $middleware->alias([
-            'admin'  => \App\Http\Middleware\AdminMiddleware::class,
-            'tenant' => \App\Http\Middleware\TenantMiddleware::class,
-            'applicant' => \App\Http\Middleware\ApplicantMiddleware::class,
+            'admin' => AdminMiddleware::class,
+            'tenant' => TenantMiddleware::class,
+            'applicant' => ApplicantMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

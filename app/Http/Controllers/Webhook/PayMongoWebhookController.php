@@ -27,7 +27,7 @@ class PayMongoWebhookController extends Controller
 
             $providerEventId = (string) (data_get($decodedPayload, 'data.id')
                 ?? data_get($decodedPayload, 'id')
-                ?? ('evt_hash_' . sha1($payload)));
+                ?? ('evt_hash_'.sha1($payload)));
 
             $webhookEvent = DB::transaction(function () use ($providerEventId, $signature, $decodedPayload): WebhookEvent {
                 $event = WebhookEvent::where('provider', 'paymongo')

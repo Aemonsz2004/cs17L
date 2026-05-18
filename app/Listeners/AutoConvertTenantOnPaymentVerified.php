@@ -7,9 +7,7 @@ use App\Support\ApplicationWorkflowService;
 
 class AutoConvertTenantOnPaymentVerified
 {
-    public function __construct(private readonly ApplicationWorkflowService $workflow)
-    {
-    }
+    public function __construct(private readonly ApplicationWorkflowService $workflow) {}
 
     public function handle(PaymentVerifiedEvent $event): void
     {

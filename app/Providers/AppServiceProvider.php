@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Events\PaymentVerifiedEvent;
 use App\Events\LeaseAcceptedEvent;
+use App\Events\PaymentVerifiedEvent;
 use App\Events\TenantCreatedEvent;
 use App\Listeners\AutoConvertTenantOnPaymentVerified;
 use App\Listeners\NotifyAdminOnLeaseAccepted;

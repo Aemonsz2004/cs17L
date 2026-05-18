@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2024_01_01_000001_create_tenants_table.php
 // Must run BEFORE users so users can have a tenant_id FK.
 

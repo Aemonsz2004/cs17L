@@ -8,6 +8,5 @@ class TenantCreatedEvent
         public readonly int $applicationId,
         public readonly int $tenantId,
         public readonly int $userId,
-    ) {
-    }
+    ) {}
 }

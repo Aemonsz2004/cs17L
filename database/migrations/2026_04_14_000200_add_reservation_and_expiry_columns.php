@@ -74,7 +74,7 @@ return new class extends Migration
     private function rebuildUnitsTable(array $statuses): void
     {
         $tempTable = 'units_status_fix_tmp';
-        $allowedStatuses = "'" . implode("','", $statuses) . "'";
+        $allowedStatuses = "'".implode("','", $statuses)."'";
 
         DB::statement('PRAGMA foreign_keys=OFF');
 

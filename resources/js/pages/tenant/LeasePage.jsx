@@ -27,12 +27,29 @@ const TERMS = (unitType) => [
     { label: 'Utilities', value: 'Included in monthly rent' },
     { label: 'Business Hours Access', value: '24/7 with building access card' },
 ];
-export default function LeasePage({ tenant, invoices = [] }) {
-    const pct = leaseProgressPct(
-        tenant?.lease_start ?? new Date().toISOString(),
-        tenant?.lease_end ?? new Date().toISOString(),
+export default function LeasePage({ tenant, leases = [], invoices = [] }) {
+    const activeLeases = useMemo(
+        () => (leases ?? []).filter((l) => l.status === 'active'),
+        [leases],
     );
     const history = useMemo(
+        () =>
+            (leases ?? [])
+                .slice()
+                .sort((a, b) => new Date(b.start_date) - new Date(a.start_date))
+                .map((lease) => ({
+                    id: lease.id,
+                    unitNumber: lease.unit?.number ?? '-',
+                    startDate: lease.start_date,
+                    endDate: lease.end_date,
+                    rent: lease.rent ?? 0,
+                    deposit: lease.deposit ?? 0,
+                    status: lease.status,
+                    paymentMethod: lease.payment_method,
+                })),
+        [leases],
+    );
+    const billingHistory = useMemo(
         () =>
             invoices.map((invoice) => ({
                 period: invoice.period,
@@ -70,7 +87,7 @@ export default function LeasePage({ tenant, invoices = [] }) {
         </head>
         <body>
           <h1>Lease Agreement</h1>
-          <div class="meta">${tenant.name} · Unit ${tenant.unit}</div>
+          <div class="meta">${tenant.name} · ${(tenant.units ?? []).map((u) => u.number).join(', ')}</div>
           <table>
             <tr><td>Lease Start</td><td>${formatDateDisplay(tenant.lease_start)}</td></tr>
             <tr><td>Lease End</td><td>${formatDateDisplay(tenant.lease_end)}</td></tr>
@@ -85,6 +102,7 @@ export default function LeasePage({ tenant, invoices = [] }) {
         printWindow.focus();
         printWindow.print();
     };
+    const unitDisplay = (tenant.units ?? []).map((u) => u.number).join(', ');
     return (
         <div className="max-w-4xl space-y-5">
             {/* ── Hero card ── */}
@@ -99,16 +117,9 @@ export default function LeasePage({ tenant, invoices = [] }) {
                                 {tenant.status === 'active' && (
                                     <Badge variant="green">Active</Badge>
                                 )}
-                                {tenant.status === 'expiring' && (
-                                    <Badge variant="amber">Expiring Soon</Badge>
-                                )}
-                                {tenant.status === 'overdue' && (
-                                    <Badge variant="red">Overdue</Badge>
-                                )}
                             </div>
                             <p className="text-sm text-[#5C6B88]">
-                                {tenant.name} · Unit {tenant.unit} ·{' '}
-                                {tenant.type}
+                                {tenant.name} · {unitDisplay} · {tenant.type}
                             </p>
                         </div>
                         <Button
@@ -120,35 +131,52 @@ export default function LeasePage({ tenant, invoices = [] }) {
                         </Button>
                     </div>
 
-                    {/* Timeline */}
-                    <div className="mb-2">
-                        <div className="mb-2 flex justify-between text-xs text-[#5C6B88]">
-                            <span className="font-medium text-[#1B2B4B]">
-                                {formatDateDisplay(tenant.lease_start)}
-                            </span>
-                            <span>{pct}% of lease elapsed</span>
-                            <span className="font-medium text-[#1B2B4B]">
-                                {formatDateDisplay(tenant.lease_end)}
-                            </span>
+                    {/* Active leases cards */}
+                    {activeLeases.length > 0 ? (
+                        <div className="space-y-4">
+                            {activeLeases.map((lease) => {
+                                const pct = leaseProgressPct(lease.start_date, lease.end_date);
+                                return (
+                                    <div key={lease.id} className="rounded-xl border border-[#1B2B4B]/8 bg-[#FAF8F4] p-4">
+                                        <div className="mb-3 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">
+                                                    Unit {lease.unit?.number ?? '-'} · {tenant.type}
+                                                </p>
+                                                <p className="text-xs text-[#5C6B88]">
+                                                    P{Number(lease.rent).toLocaleString()}/mo · {lease.payment_method}
+                                                </p>
+                                            </div>
+                                            <Badge variant="green">Active</Badge>
+                                        </div>
+                                        <div className="mb-2 flex justify-between text-xs text-[#5C6B88]">
+                                            <span className="font-medium text-[#1B2B4B]">
+                                                {formatDateDisplay(lease.start_date)}
+                                            </span>
+                                            <span>{pct}% elapsed</span>
+                                            <span className="font-medium text-[#1B2B4B]">
+                                                {formatDateDisplay(lease.end_date)}
+                                            </span>
+                                        </div>
+                                        <div className="relative h-3 overflow-visible rounded-full bg-[#EDE5D8]">
+                                            <div
+                                                className="h-full rounded-full bg-[#24A18F] transition-all duration-500"
+                                                style={{ width: `${pct}%` }}
+                                            />
+                                            <div
+                                                className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#24A18F] bg-white shadow"
+                                                style={{ left: `${pct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
-                        <div className="relative h-3 overflow-visible rounded-full bg-[#EDE5D8]">
-                            <div
-                                className="h-full rounded-full bg-[#24A18F] transition-all duration-500"
-                                style={{ width: `${pct}%` }}
-                            />
-                            <div
-                                className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[#24A18F] bg-white shadow"
-                                style={{ left: `${pct}%` }}
-                            />
+                    ) : (
+                        <div className="rounded-xl bg-[#FAF8F4] p-4 text-center text-sm text-[#5C6B88]">
+                            No active leases found.
                         </div>
-                        <div className="mt-1.5 flex justify-between text-[10px] text-[#5C6B88]">
-                            <span>Lease start</span>
-                            <span className="font-semibold text-[#24A18F]">
-                                Today — Mar 2026
-                            </span>
-                            <span>Lease end</span>
-                        </div>
-                    </div>
+                    )}
                 </Card.Body>
             </Card>
 
@@ -158,10 +186,7 @@ export default function LeasePage({ tenant, invoices = [] }) {
                     <Card.Header title="Lease Details" />
                     <Card.Body>
                         <InfoRow label="Tenant" value={tenant.name} />
-                        <InfoRow
-                            label="Unit Number"
-                            value={`Unit ${tenant.unit}`}
-                        />
+                        <InfoRow label="Units" value={unitDisplay} />
                         <InfoRow label="Floor" value={tenant.floor} />
                         <InfoRow label="Unit Type" value={tenant.type} />
                         <InfoRow
@@ -170,21 +195,11 @@ export default function LeasePage({ tenant, invoices = [] }) {
                         />
                         <InfoRow
                             label="Lease End"
-                            value={
-                                <span
-                                    className={
-                                        tenant.status === 'expiring'
-                                            ? 'font-semibold text-amber-600'
-                                            : ''
-                                    }
-                                >
-                                    {formatDateDisplay(tenant.lease_end)}
-                                </span>
-                            }
+                            value={formatDateDisplay(tenant.lease_end)}
                         />
                         <InfoRow
                             label="Contract Length"
-                            value="4 years 11 months"
+                            value="Per lease term"
                             border={false}
                         />
                     </Card.Body>
@@ -245,12 +260,16 @@ export default function LeasePage({ tenant, invoices = [] }) {
             <Card>
                 <Card.Header title="Lease & Renewal History" />
                 <Card.Body flush>
+                    {history.length === 0 && (
+                        <div className="px-5 py-4 text-sm text-[#5C6B88]">
+                            No lease records found.
+                        </div>
+                    )}
                     {history.map((h, i) => (
                         <div
-                            key={i}
+                            key={h.id}
                             className="flex items-center gap-4 border-b border-[#1B2B4B]/5 px-5 py-4 last:border-0"
                         >
-                            {/* Timeline dot */}
                             <div className="flex flex-col items-center gap-1">
                                 <div
                                     className={[
@@ -266,40 +285,36 @@ export default function LeasePage({ tenant, invoices = [] }) {
                             </div>
                             <div className="flex-1">
                                 <p className="text-sm font-medium text-[#1B2B4B]">
-                                    {h.period}
+                                    Unit {h.unitNumber}
                                 </p>
                                 <p className="text-xs text-[#5C6B88]">
-                                    ₱{h.rent.toLocaleString()}/mo
+                                    {formatDateDisplay(h.startDate)} – {formatDateDisplay(h.endDate)} · ₱{h.rent.toLocaleString()}/mo
                                 </p>
                             </div>
-                            {h.status === 'active' && (
-                                <Badge variant="green">Current</Badge>
-                            )}
-                            {h.status === 'completed' && (
-                                <Badge variant="gray">Completed</Badge>
-                            )}
+                            <Badge variant={h.status === 'active' ? 'green' : 'gray'}>
+                                {h.status === 'active' ? 'Current' : h.status === 'ended' ? 'Ended' : h.status === 'expired' ? 'Expired' : h.status}
+                            </Badge>
                         </div>
                     ))}
                 </Card.Body>
             </Card>
 
-            {/* ── Expiring banner ── */}
-            {tenant.status === 'expiring' && (
+            {/* ── Expiring banner (computed) ── */}
+            {activeLeases.some((l) => {
+                const end = new Date(l.end_date);
+                const diff = Math.ceil((end - new Date()) / (1000 * 60 * 60 * 24));
+                return diff > 0 && diff <= 30;
+            }) && (
                 <div className="flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-5">
                     <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100">
-                        {/* warning icon slot */}
-                        <span className="text-lg font-bold text-amber-500">
-                            !
-                        </span>
+                        <span className="text-lg font-bold text-amber-500">!</span>
                     </div>
                     <div className="flex-1">
                         <p className="text-sm font-bold text-amber-700">
-                            Your lease is expiring soon
+                            A lease is expiring soon
                         </p>
                         <p className="mt-0.5 text-xs text-amber-600">
-                            Your current lease ends on{' '}
-                            {formatDateDisplay(tenant.lease_end)}. Contact the
-                            admin to discuss renewal terms.
+                            Contact the admin to discuss renewal terms.
                         </p>
                     </div>
                     <Button

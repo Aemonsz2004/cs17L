@@ -1,14 +1,23 @@
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, usePage } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 import '../css/app.css';
+import { ToastContainer } from './components/Toast';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
-// Main browser entry point for the Inertia app.
+function AppWithToast({ children }) {
+    const { flash } = usePage().props;
+    return (
+        <>
+            {children}
+            <ToastContainer flash={flash} />
+        </>
+    );
+}
+
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
-    // We now load .jsx pages since the frontend is JavaScript-only.
     resolve: (name) =>
         resolvePageComponent(
             `./pages/${name}.jsx`,
@@ -16,9 +25,11 @@ createInertiaApp({
         ),
     setup({ el, App, props }) {
         const root = createRoot(el);
-
-        // Render the current Inertia page component in the root element.
-        root.render(<App {...props} />);
+        root.render(
+            <AppWithToast>
+                <App {...props} />
+            </AppWithToast>,
+        );
     },
     progress: {
         color: '#4B5563',

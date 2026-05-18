@@ -4,10 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Tenant extends Model
 {
@@ -20,7 +20,6 @@ class Tenant extends Model
         'contact',
         'phone',
         'email',
-        'unit',
         'floor',
         'type',
         'rent',
@@ -33,9 +32,9 @@ class Tenant extends Model
 
     protected $casts = [
         'lease_start' => 'date',
-        'lease_end'   => 'date',
-        'rent'        => 'integer',
-        'deposit'     => 'integer',
+        'lease_end' => 'date',
+        'rent' => 'integer',
+        'deposit' => 'integer',
     ];
 
     // ── Relationships ─────────────────────────────────────────────────────────
@@ -48,6 +47,11 @@ class Tenant extends Model
     public function unitRecord(): HasOne
     {
         return $this->hasOne(Unit::class);
+    }
+
+    public function units(): HasMany
+    {
+        return $this->hasMany(Unit::class);
     }
 
     public function invoices(): HasMany
@@ -63,7 +67,7 @@ class Tenant extends Model
     public function activeLease(): HasOne
     {
         return $this->hasOne(Lease::class)
-            ->whereIn('status', ['active', 'expiring', 'overdue'])
+            ->where('status', 'active')
             ->latestOfMany();
     }
 
@@ -82,9 +86,29 @@ class Tenant extends Model
         return $this->hasMany(RtmsNotification::class);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    public function moveOutHistories(): HasMany
+    {
+        return $this->hasMany(MoveOutHistory::class);
+    }
 
-    public function isExpiring(): bool { return $this->status === 'expiring'; }
-    public function isOverdue(): bool  { return $this->status === 'overdue';  }
-    public function isActive(): bool   { return $this->status === 'active';   }
+    // ── Computed Helpers ──────────────────────────────────────────────────────
+
+    public function isExpiring(): bool
+    {
+        return $this->lease_end && now()->diffInDays($this->lease_end, false) <= 30
+            && now()->diffInDays($this->lease_end, false) > 0;
+    }
+
+    public function isOverdue(): bool
+    {
+        return Invoice::where('tenant_id', $this->id)
+            ->whereIn('status', ['due', 'pending'])
+            ->where('due_date', '<', now())
+            ->exists();
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
 }

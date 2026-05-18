@@ -19,6 +19,7 @@ function parseDateValue(value) {
     }
 
     const trimmed = value.trim();
+
     if (!trimmed) {
         return null;
     }
@@ -28,6 +29,7 @@ function parseDateValue(value) {
         : trimmed;
 
     const parsed = new Date(normalized);
+
     if (Number.isNaN(parsed.getTime())) {
         return null;
     }
@@ -37,6 +39,7 @@ function parseDateValue(value) {
 
 export function formatDateDisplay(value, fallback = '-') {
     const parsed = parseDateValue(value);
+
     if (!parsed) {
         return fallback;
     }
@@ -46,6 +49,7 @@ export function formatDateDisplay(value, fallback = '-') {
 
 export function formatDateTimeDisplay(value, fallback = '-') {
     const parsed = parseDateValue(value);
+
     if (!parsed) {
         return fallback;
     }

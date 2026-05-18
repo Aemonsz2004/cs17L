@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2024_01_01_000006_create_notifications_table.php
 
 use Illuminate\Database\Migrations\Migration;
@@ -20,9 +21,9 @@ return new class extends Migration
             $table->text('message');
             $table->enum('category', ['payment', 'lease', 'maintenance', 'system']);
             $table->foreignId('tenant_id')
-                  ->nullable()
-                  ->constrained('tenants')
-                  ->nullOnDelete();
+                ->nullable()
+                ->constrained('tenants')
+                ->nullOnDelete();
             // null tenant_id  = admin-facing notification
             // set tenant_id   = scoped to that tenant's portal
             $table->boolean('unread')->default(true);

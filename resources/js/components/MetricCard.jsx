@@ -12,11 +12,14 @@ export default function MetricCard({
     icon,
     iconBg = 'bg-[#1D7B6E]/10 text-[#1D7B6E]',
     className = '',
+    onClick,
 }) {
     return (
         <div
+            onClick={onClick}
             className={[
                 'flex flex-col gap-1 rounded-xl bg-[#F5F0E8]/70 p-4',
+                onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : '',
                 className,
             ].join(' ')}
         >

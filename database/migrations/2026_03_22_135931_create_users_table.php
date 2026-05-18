@@ -1,4 +1,5 @@
 <?php
+
 // database/migrations/2024_01_01_000002_create_users_table.php
 
 use Illuminate\Database\Migrations\Migration;
@@ -17,9 +18,9 @@ return new class extends Migration
             $table->string('password');
             $table->enum('role', ['admin', 'tenant'])->default('tenant');
             $table->foreignId('tenant_id')
-                  ->nullable()
-                  ->constrained('tenants')
-                  ->nullOnDelete();
+                ->nullable()
+                ->constrained('tenants')
+                ->nullOnDelete();
             $table->rememberToken();
             $table->timestamps();
         });

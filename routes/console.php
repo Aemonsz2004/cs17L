@@ -1,9 +1,9 @@
 <?php
 
+use App\Support\ApplicationWorkflowService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
-use App\Support\ApplicationWorkflowService;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
