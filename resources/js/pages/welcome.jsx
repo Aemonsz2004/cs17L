@@ -70,15 +70,14 @@ export default function App({ initialPage = 'dashboard' }) {
         applications: propApplications,
         archivedApplications: propArchivedApplications,
         unread_count,
-    } =
-        usePage().props;
+    } = usePage().props;
     const [notifications, setNotifications] = useState(propNotifications ?? []);
     const [archivedNotifications, setArchivedNotifications] = useState(
         propArchivedNotifications ?? [],
     );
     const unreadCount = propNotifications
         ? notifications.filter((n) => n.unread).length
-        : unread_count ?? 0;
+        : (unread_count ?? 0);
     const unreadMessageCount = (propMessages ?? []).filter(
         (message) => message.from === 'tenant' && !message.read,
     ).length;
@@ -143,6 +142,8 @@ export default function App({ initialPage = 'dashboard' }) {
             user={ADMIN_USER}
             pageTitle={PAGE_TITLES[page]}
             notifCount={unreadCount}
+            notifications={notifications}
+            archivedNotifications={archivedNotifications}
             onNotifClick={() => navigate('notifications')}
         >
             {renderPage()}

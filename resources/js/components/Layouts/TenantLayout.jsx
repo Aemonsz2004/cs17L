@@ -9,6 +9,8 @@ export default function TenantLayout({
     pageTitle,
     navbarAction,
     notifCount = 0,
+    notifications = [],
+    archivedNotifications = [],
     onNotifClick,
     isMovedOut = false,
     children,
@@ -29,10 +31,14 @@ export default function TenantLayout({
                     action={navbarAction}
                     user={user}
                     notifCount={notifCount}
+                    notifications={notifications}
+                    archivedNotifications={archivedNotifications}
                     onNotifClick={onNotifClick}
                 />
                 <main className="flex-1 overflow-y-auto">
-                    <div className="p-6" style={{ zoom: 1.25 }}>{children}</div>
+                    <div className="p-6" style={{ zoom: 1.25 }}>
+                        {children}
+                    </div>
                 </main>
             </div>
         </div>

@@ -76,7 +76,13 @@ export default function TenantApp({
                     />
                 );
             case 'lease':
-                return <LeasePage tenant={tenant} invoices={invoices} leases={leases} />;
+                return (
+                    <LeasePage
+                        tenant={tenant}
+                        invoices={invoices}
+                        leases={leases}
+                    />
+                );
             case 'billing':
                 return (
                     <TenantBillingPage onPayRent={() => navigate('pay-rent')} />
@@ -103,14 +109,17 @@ export default function TenantApp({
             user={{
                 name: userName,
                 initials,
-                unit: tenant?.units?.length > 0
-                    ? tenant.units.map((u) => u.number).join(', ')
-                    : tenant?.unit ?? null,
+                unit:
+                    tenant?.units?.length > 0
+                        ? tenant.units.map((u) => u.number).join(', ')
+                        : (tenant?.unit ?? null),
                 tenant,
             }}
             messageCount={messageCount}
             pageTitle={PAGE_TITLES[page]}
             notifCount={unreadCount}
+            notifications={notifications}
+            archivedNotifications={archivedNotifications}
             onNotifClick={() => navigate('notifications')}
             isMovedOut={isMovedOut}
         >

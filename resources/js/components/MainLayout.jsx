@@ -11,6 +11,8 @@ export default function MainLayout({
     pageTitle,
     navbarAction,
     notifCount = 0,
+    notifications = [],
+    archivedNotifications = [],
     onNotifClick,
     children,
 }) {
@@ -36,6 +38,8 @@ export default function MainLayout({
                     action={navbarAction}
                     user={user}
                     notifCount={notifCount}
+                    notifications={notifications}
+                    archivedNotifications={archivedNotifications}
                     onNotifClick={onNotifClick}
                 />
 

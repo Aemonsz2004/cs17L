@@ -68,6 +68,49 @@ class HandleInertiaRequests extends Middleware
 
                 return 0;
             },
+
+            // Notifications — shared globally so the bell dropdown works on every page
+            'notifications' => function () use ($request) {
+                if (! $request->user()) {
+                    return [];
+                }
+
+                if ($request->user()->isAdmin()) {
+                    return RtmsNotification::admin()
+                        ->latest()
+                        ->get();
+                }
+
+                if ($request->user()->tenant_id) {
+                    return RtmsNotification::forTenant($request->user()->tenant_id)
+                        ->latest()
+                        ->get();
+                }
+
+                return [];
+            },
+
+            'archivedNotifications' => function () use ($request) {
+                if (! $request->user()) {
+                    return [];
+                }
+
+                if ($request->user()->isAdmin()) {
+                    return RtmsNotification::admin()
+                        ->onlyTrashed()
+                        ->latest('deleted_at')
+                        ->get();
+                }
+
+                if ($request->user()->tenant_id) {
+                    return RtmsNotification::forTenant($request->user()->tenant_id)
+                        ->onlyTrashed()
+                        ->latest('deleted_at')
+                        ->get();
+                }
+
+                return [];
+            },
         ]);
     }
 }
