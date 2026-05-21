@@ -1,13 +1,11 @@
 // src/pages/admin/NotificationsPage.jsx
 import { router } from '@inertiajs/react';
 import { useEffect, useMemo, useState } from 'react';
-import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
 import ConfirmModal from '../../components/ConfirmModal';
 import { Input } from '../../components/Input';
 import MetricCard from '../../components/MetricCard';
-import Modal from '../../components/Modal';
 import NotifItem from '../../components/NotifItem';
 import { formatDateTimeDisplay } from '../../lib/date';
 const CATEGORIES = [
@@ -41,8 +39,6 @@ export default function NotificationsPage({
     const [showUnreadOnly, setShowUnreadOnly] = useState(false);
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
-    const [selected, setSelected] = useState(null);
-    const [detailOpen, setDetailOpen] = useState(false);
     const pageSize = 8;
     const unreadCount = useMemo(
         () => notifications.filter((n) => n.unread).length,
@@ -118,10 +114,6 @@ export default function NotificationsPage({
             prev.map((notification) => ({ ...notification, unread: false })),
         );
     };
-    const closeDetail = () => {
-        setDetailOpen(false);
-        setSelected(null);
-    };
     const archiveNotification = (notification) => {
         setConfirmAction({ type: 'archive', notification });
     };
@@ -134,7 +126,6 @@ export default function NotificationsPage({
             prev.filter((item) => item.id !== notification.id),
         );
         onChangeArchived((prev) => [notification, ...prev]);
-        closeDetail();
     };
     const restoreNotification = (notification) => {
         setConfirmAction({ type: 'restore', notification });
@@ -148,38 +139,18 @@ export default function NotificationsPage({
             prev.filter((item) => item.id !== notification.id),
         );
         onChangeNotifications((prev) => [notification, ...prev]);
-        closeDetail();
-    };
-    const confirmMarkRead = () => {
-        if (!confirmAction) return;
-        const { notificationId } = confirmAction;
-        setConfirmAction(null);
-        markAsRead(notificationId);
-        setSelected((prev) =>
-            prev ? { ...prev, unread: false } : prev,
-        );
-    };
-    const confirmViewMore = () => {
-        if (!selected) return;
-        setConfirmAction(null);
-        openDetails(selected);
-        setDetailOpen(false);
     };
     const openDetails = (notification) => {
         markAsRead(notification.id);
 
         if (notification.category === 'lease') {
-            localStorage.setItem('admin-applications-autofocus', 'pending_review');
+            localStorage.setItem(
+                'admin-applications-autofocus',
+                'pending_review',
+            );
         }
 
         onNavigate(getDestination(notification.category));
-    };
-    const openNotification = (notification) => {
-        setSelected(notification);
-        setDetailOpen(true);
-        if (viewMode === 'active') {
-            markAsRead(notification.id);
-        }
     };
     return (
         <div className="space-y-5">
@@ -199,18 +170,13 @@ export default function NotificationsPage({
                 />
                 <MetricCard
                     label="Payments"
-                    value={
-                        items.filter((n) => n.category === 'payment')
-                            .length
-                    }
+                    value={items.filter((n) => n.category === 'payment').length}
                     sub="Payment alerts"
                 />
                 <MetricCard
                     label="Maintenance"
                     value={
-                        items.filter(
-                            (n) => n.category === 'maintenance',
-                        ).length
+                        items.filter((n) => n.category === 'maintenance').length
                     }
                     sub="Repair alerts"
                 />
@@ -222,7 +188,7 @@ export default function NotificationsPage({
                     action={
                         <div className="flex items-center gap-2">
                             <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
-                                {['active', 'archived'].map((tab) => (
+                                {['archived', 'active'].map((tab) => (
                                     <button
                                         key={tab}
                                         onClick={() => setViewMode(tab)}
@@ -302,9 +268,8 @@ export default function NotificationsPage({
                             >
                                 {c.key === 'all'
                                     ? items.length
-                                    : items.filter(
-                                          (n) => n.category === c.key,
-                                      ).length}
+                                    : items.filter((n) => n.category === c.key)
+                                          .length}
                             </span>
                         </button>
                     ))}
@@ -317,26 +282,67 @@ export default function NotificationsPage({
                     </div>
                 ) : (
                     pagedNotifications.map((notification) => (
-                        <button
+                        <div
                             key={notification.id}
-                            type="button"
-                            onClick={() => openNotification(notification)}
-                            title="Open notification details"
-                            aria-label={`Open notification: ${notification.message}`}
-                            className="w-full text-left"
+                            className="flex items-center gap-2 border-b border-[#1B2B4B]/5 px-5 transition-colors hover:bg-[#FAF8F4]"
                         >
-                            <NotifItem
-                                variant={notification.variant}
-                                message={notification.message}
-                                timestamp={formatDateTimeDisplay(
-                                    notification.timestamp ??
-                                        notification.created_at,
-                                    '-',
+                            <button
+                                type="button"
+                                onClick={() => openDetails(notification)}
+                                title="Go to related page"
+                                aria-label={`Go to related page: ${notification.message}`}
+                                className="min-w-0 flex-1 text-left"
+                            >
+                                <NotifItem
+                                    variant={notification.variant}
+                                    message={notification.message}
+                                    timestamp={formatDateTimeDisplay(
+                                        notification.timestamp ??
+                                            notification.created_at,
+                                        '-',
+                                    )}
+                                    unread={notification.unread}
+                                    className="border-0"
+                                />
+                            </button>
+                            <div className="flex shrink-0 items-center gap-1 rounded-2xlhover:opacity-50 text-white px-2 py-1 text-xs font-medium">
+                                {viewMode === 'active' && (
+                                    <Button
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            markAsRead(notification.id);
+                                        }}
+                                    >
+                                        Mark as read
+                                    </Button>
                                 )}
-                                unread={notification.unread}
-                                className="transition-colors hover:bg-[#F5F0E8]"
-                            />
-                        </button>
+                                {viewMode === 'active' ? (
+                                    <Button
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            archiveNotification(notification);
+                                        }}
+                                    >
+                                        Archive
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="ghost"
+                                        size="xs"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            restoreNotification(notification);
+                                        }}
+                                    >
+                                        Restore
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
                     ))
                 )}
 
@@ -349,7 +355,8 @@ export default function NotificationsPage({
                                 : (currentPage - 1) * pageSize + 1}
                             -{Math.min(currentPage * pageSize, filtered.length)}{' '}
                             of {filtered.length}
-                            {showUnreadOnly && viewMode === 'active' &&
+                            {showUnreadOnly &&
+                                viewMode === 'active' &&
                                 ' (unread only)'}
                         </span>
                         <div className="flex items-center gap-2">
@@ -383,104 +390,41 @@ export default function NotificationsPage({
                 </Card.Footer>
             </Card>
 
-            {selected && (
-                <Modal
-                    open={detailOpen}
-                    onClose={() => setDetailOpen(false)}
-                    title="Notification Detail"
-                    size="md"
-                    footer={
-                        <div className="flex w-full items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                                {viewMode === 'active' && selected.unread && (
-                                    <Button
-                                        variant="outline"
-                                        onClick={() => setConfirmAction({ type: 'markRead', notificationId: selected.id })}
-                                    >
-                                        Mark as Read
-                                    </Button>
-                                )}
-                                {viewMode === 'active' && (
-                                    <Button
-                                        variant="primary"
-                                        onClick={() => setConfirmAction({ type: 'viewMore' })}
-                                    >
-                                        View More
-                                    </Button>
-                                )}
-                            </div>
-                            {viewMode === 'active' ? (
-                                <Button
-                                    variant="danger"
-                                    onClick={() => archiveNotification(selected)}
-                                >
-                                    Archive
-                                </Button>
-                            ) : (
-                                <Button
-                                    variant="primary"
-                                    onClick={() => restoreNotification(selected)}
-                                >
-                                    Restore
-                                </Button>
-                            )}
-                        </div>
-                    }
-                >
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                            <Badge variant={selected.unread ? 'red' : 'gray'}>
-                                {selected.unread ? 'Unread' : 'Read'}
-                            </Badge>
-                            <Badge variant="blue">
-                                {categoryLabel(selected.category)}
-                            </Badge>
-                        </div>
-                        <p className="text-base leading-snug font-semibold text-[#1B2B4B]">
-                            {selected.message}
-                        </p>
-                        <p className="text-xs text-[#5C6B88]">
-                            {formatDateTimeDisplay(
-                                selected.timestamp ?? selected.created_at,
-                                '-',
-                            )}
-                        </p>
-                    </div>
-                </Modal>
-            )}
-
             {confirmAction && (
                 <ConfirmModal
                     open
                     onClose={() => setConfirmAction(null)}
                     onConfirm={() => {
-                        if (confirmAction.type === 'archive') confirmArchiveNotification();
-                        if (confirmAction.type === 'restore') confirmRestoreNotification();
-                        if (confirmAction.type === 'markAllRead') confirmMarkAllRead();
-                        if (confirmAction.type === 'markRead') confirmMarkRead();
-                        if (confirmAction.type === 'viewMore') confirmViewMore();
+                        if (confirmAction.type === 'archive')
+                            confirmArchiveNotification();
+                        if (confirmAction.type === 'restore')
+                            confirmRestoreNotification();
+                        if (confirmAction.type === 'markAllRead')
+                            confirmMarkAllRead();
                     }}
                     title={
-                        confirmAction.type === 'archive' ? 'Archive Notification' :
-                        confirmAction.type === 'restore' ? 'Restore Notification' :
-                        confirmAction.type === 'markAllRead' ? 'Mark All as Read' :
-                        confirmAction.type === 'markRead' ? 'Mark as Read' :
-                        'Open Related Page'
+                        confirmAction.type === 'archive'
+                            ? 'Archive Notification'
+                            : confirmAction.type === 'restore'
+                              ? 'Restore Notification'
+                              : 'Mark All as Read'
                     }
                     message={
-                        confirmAction.type === 'archive' ? 'Archive this notification?' :
-                        confirmAction.type === 'restore' ? 'Restore this notification?' :
-                        confirmAction.type === 'markAllRead' ? 'Mark all notifications as read?' :
-                        confirmAction.type === 'markRead' ? 'Mark this notification as read?' :
-                        'Open related page for this notification?'
+                        confirmAction.type === 'archive'
+                            ? 'Archive this notification?'
+                            : confirmAction.type === 'restore'
+                              ? 'Restore this notification?'
+                              : 'Mark all notifications as read?'
                     }
-                    variant={confirmAction.type === 'archive' ? 'danger' : 'primary'}
+                    variant={
+                        confirmAction.type === 'archive' ? 'danger' : 'primary'
+                    }
                     confirmLabel={
-                        confirmAction.type === 'archive' ? 'Archive' :
-                        confirmAction.type === 'restore' ? 'Restore' :
-                        confirmAction.type === 'markAllRead' ? 'Mark All Read' :
-                        confirmAction.type === 'markRead' ? 'Mark as Read' :
-                        'Open'
+                        confirmAction.type === 'archive'
+                            ? 'Archive'
+                            : confirmAction.type === 'restore'
+                              ? 'Restore'
+                              : 'Mark All Read'
                     }
                 />
             )}
