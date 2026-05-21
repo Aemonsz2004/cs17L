@@ -40,7 +40,7 @@ class PayMongoDemoController extends Controller
             'status' => 'awaiting_payment_method',
             'created_at' => now()->toIso8601String(),
             'expires_at' => now()->addMinutes(15)->toIso8601String(),
-            'checkout_url' => 'https://demo.paymongo.local/checkout/'.$intentId,
+            'checkout_url' => '/tenant/pay-rent?demo_checkout='.$intentId,
         ];
 
         Cache::put($this->cacheKey($intentId), $intent, now()->addMinutes(20));
@@ -131,6 +131,11 @@ class PayMongoDemoController extends Controller
 
     private function assertInvoiceMatchesUnit(Invoice $invoice): void
     {
+        // Deposit invoices use a fixed deposit amount, not rent+utilities+penalty
+        if ($invoice->period === 'Deposit') {
+            return;
+        }
+
         $expectedTotal = (int) $invoice->rent + (int) $invoice->utilities + (int) $invoice->penalty;
 
         if ((int) $invoice->total !== $expectedTotal) {

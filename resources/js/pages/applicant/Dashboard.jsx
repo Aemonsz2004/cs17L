@@ -1,70 +1,26 @@
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
 import Modal from '../../components/Modal';
 
 const STATUS_LABELS = {
-    pending_review: 'Pending admin review',
-    approved: 'Approved - unit reserved for you',
+    pending: 'Pending admin review',
+    approved: 'Approved - awaiting payment',
+    paid: 'Payment confirmed - awaiting move-in confirmation',
     rejected: 'Rejected',
-    lease_sent: 'Lease sent - waiting for your acknowledgment',
-    payment_pending: 'Payment pending - complete PayMongo checkout',
-    payment_paid: 'Payment paid - system is auto-converting your tenant profile',
-    converted: 'Converted to tenant',
+    converted: 'You are now a tenant!',
 };
+
+import PublicLayout from '../../components/Layouts/PublicLayout';
 
 export default function Dashboard({ application }) {
     const flash = usePage().props?.flash ?? {};
-    const [leaseModalOpen, setLeaseModalOpen] = useState(false);
-    const [retryingCheckout, setRetryingCheckout] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-    const depositForm = useForm({
-        deposit_method: 'GCash',
-    });
-
-    const latestPayment = application?.latest_payment ?? null;
-    const webhookVerified = Boolean(application?.payment_verified_at);
-    const latestPaymentExpired = Boolean(
-        latestPayment?.expires_at && new Date(latestPayment.expires_at).getTime() <= Date.now(),
-    );
-    const latestPaymentBlocked =
-        !webhookVerified
-        && (
-            latestPayment?.status === 'failed'
-            || latestPayment?.status === 'expired'
-            || latestPaymentExpired
-        );
-    const isBankTransferPending =
-        !webhookVerified && latestPayment?.payment_method === 'Bank Transfer';
-    const canStartCheckout = application?.status === 'payment_pending' && (!latestPayment || latestPaymentBlocked);
-
-    const acknowledgeLease = () => {
-        if (!application) return;
-        router.post(`/apply/${application.id}/acknowledge-lease`);
-    };
-
-    const submitDeposit = (event) => {
-        event.preventDefault();
-        if (!application) return;
-        depositForm.post(`/apply/${application.id}/submit-deposit`);
-    };
-
-    const retryDeposit = () => {
-        if (!application) return;
-
-        setRetryingCheckout(true);
-
-        router.post(
-            `/apply/${application.id}/submit-deposit`,
-            {
-                deposit_method: 'GCash',
-                retry: true,
-            },
-            {
-                preserveScroll: true,
-                onFinish: () => setRetryingCheckout(false),
-            },
-        );
-    };
+    useEffect(() => {
+        if (flash.payment_success) {
+            setShowPaymentModal(true);
+        }
+    }, [flash.payment_success]);
 
     return (
         <>
@@ -75,7 +31,7 @@ export default function Dashboard({ application }) {
                     <div className="flex items-center justify-between">
                         <h1 className="text-3xl font-black">Applicant Dashboard</h1>
                         <div className="flex gap-2">
-                            <Link href="/units" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white">
+                            <Link href="/units" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium bg-white hover:gray-50">
                                 Browse Units
                             </Link>
                             {!application && (
@@ -130,143 +86,40 @@ export default function Dashboard({ application }) {
                                 </div>
                             )}
 
-                            {application.status === 'lease_sent' && (
-                                <div className="mt-5 space-y-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setLeaseModalOpen(true)}
-                                        className="w-full rounded-lg border border-[#15233d]/10 bg-[#f8fafc] p-4 text-left text-sm text-[#334155] hover:bg-white"
-                                    >
-                                        <p className="mb-2 font-semibold text-[#15233d]">Lease Terms (Click to view full)</p>
-                                        <p className="line-clamp-4 whitespace-pre-wrap">{application.lease_terms}</p>
-                                    </button>
-
-                                    {application.lease_attachment_path && (
-                                        <a
-                                            href={`/storage/${application.lease_attachment_path}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="inline-flex rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white"
-                                        >
-                                            Open Lease PDF Attachment
-                                        </a>
-                                    )}
-
-                                    <button
-                                        type="button"
-                                        onClick={acknowledgeLease}
-                                        className="rounded-lg bg-[#15233d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f1a2d]"
-                                    >
-                                        I acknowledge these lease terms
-                                    </button>
-                                </div>
-                            )}
-
-                            {canStartCheckout && (
-                                <form className="mt-5 grid gap-3 md:grid-cols-3" onSubmit={submitDeposit}>
-                                    <div>
-                                        <label className="block text-sm font-medium">Deposit Method</label>
-                                        <select
-                                            value={depositForm.data.deposit_method}
-                                            onChange={(event) =>
-                                                depositForm.setData('deposit_method', event.target.value)
-                                            }
-                                            disabled
-                                            className="mt-1 w-full rounded-lg border border-[#15233d]/20 bg-[#f1f5f9] px-3 py-2 text-[#334155]"
-                                        >
-                                            <option value="GCash">GCash</option>
-                                        </select>
-                                        <p className="mt-1 text-xs text-[#64748b]">Temporary mode: GCash only.</p>
+                            {application.status === 'approved' && (
+                                <div className="mt-5 space-y-4">
+                                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                                        Your application has been approved and the unit is reserved for you.
+                                        Choose your payment method below to proceed.
                                     </div>
-
-                                    <div className="md:col-span-2 rounded-lg border border-[#15233d]/10 bg-[#f8fafc] px-3 py-2 text-xs text-[#42506b]">
-                                        {latestPaymentBlocked
-                                            ? 'Your previous checkout expired/failed. Start a new checkout to continue payment.'
-                                            : 'After checkout, PayMongo webhook will automatically mark your payment as verified.'}
-                                    </div>
-
-                                    <div className="md:col-span-3 flex items-center gap-3">
-                                        <button
-                                            type="submit"
-                                            disabled={depositForm.processing}
-                                            className="rounded-lg bg-[#15233d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f1a2d] disabled:opacity-60"
-                                        >
-                                            {depositForm.processing ? 'Creating checkout...' : 'Start PayMongo Deposit Checkout'}
-                                        </button>
-
-                                        {flash.checkout_url && (
-                                            <a
-                                                href={flash.checkout_url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white"
-                                            >
-                                                Open Checkout
-                                            </a>
-                                        )}
-                                    </div>
-                                </form>
-                            )}
-
-                            {application.status === 'payment_pending' && latestPayment && !canStartCheckout && (
-                                <div className="mt-5 space-y-3 rounded-lg border border-[#15233d]/10 bg-[#f8fafc] p-4">
-                                    <p className="text-sm text-[#334155]">
-                                        Latest payment reference: <span className="font-semibold">{latestPayment?.provider_reference ?? 'N/A'}</span>
-                                    </p>
-                                    <p className="text-sm text-[#334155]">
-                                        Payment method: <span className="font-semibold">{latestPayment?.payment_method ?? 'N/A'}</span>
-                                    </p>
-                                    <p className={`text-sm font-semibold ${webhookVerified ? 'text-emerald-700' : 'text-amber-700'}`}>
-                                        {webhookVerified
-                                            ? 'Payment verified by PayMongo webhook. Auto-conversion is in progress.'
-                                            : 'Waiting PayMongo webhook verification.'}
-                                    </p>
-                                    {isBankTransferPending && (
-                                        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                                            If BPI shows "Access token is invalid or expired", use the retry button once to generate a fresh GCash checkout.
-                                        </p>
-                                    )}
-                                    {latestPayment?.expires_at && !webhookVerified && (
-                                        <p className="text-sm text-[#334155]">
-                                            Checkout expires at: <span className="font-semibold">{new Date(latestPayment.expires_at).toLocaleString()}</span>
-                                        </p>
-                                    )}
-                                    {latestPayment?.checkout_url && !webhookVerified && !latestPaymentBlocked && (
-                                        <a
-                                            href={latestPayment.checkout_url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="inline-flex rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white"
-                                        >
-                                            {isBankTransferPending ? 'Continue Previous Checkout' : 'Continue PayMongo Checkout'}
-                                        </a>
-                                    )}
-                                    {!webhookVerified && (
+                                    <div className="flex flex-wrap gap-3">
                                         <button
                                             type="button"
-                                            onClick={retryDeposit}
-                                            disabled={retryingCheckout}
-                                            className="inline-flex rounded-lg bg-[#15233d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f1a2d] disabled:opacity-60"
+                                            onClick={() => router.post('/apply/payment/choose', { payment_method: 'gcash' }, { preserveScroll: true })}
+                                            className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700"
                                         >
-                                            {retryingCheckout
-                                                ? 'Generating new checkout...'
-                                                : isBankTransferPending
-                                                  ? 'Generate Fresh GCash Checkout'
-                                                  : 'Try Again (Generate New Checkout)'}
+                                            Pay with GCash
                                         </button>
-                                    )}
+                                        <button
+                                            type="button"
+                                            onClick={() => router.post('/apply/payment/choose', { payment_method: 'cash' }, { preserveScroll: true })}
+                                            className="rounded-lg border border-[#15233d]/20 bg-white px-5 py-3 text-sm font-semibold text-[#15233d] hover:bg-gray-50"
+                                        >
+                                            Pay with Cash
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
-                            {application.status === 'payment_paid' && (
-                                <div className="mt-5 rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm text-teal-700">
-                                    Payment has been verified. The system is now creating your tenant profile automatically.
+                            {application.status === 'paid' && (
+                                <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                                    Payment confirmed. Awaiting admin move-in confirmation.
                                 </div>
                             )}
 
                             {application.status === 'converted' && (
                                 <div className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800">
-                                    Conversion complete. Your current account now has tenant access.
+                                    You are now a tenant! Use your tenant account to manage payments and requests.
                                 </div>
                             )}
                         </div>
@@ -274,39 +127,36 @@ export default function Dashboard({ application }) {
                 </div>
             </div>
 
-            {application?.status === 'lease_sent' && (
-                <Modal
-                    open={leaseModalOpen}
-                    onClose={() => setLeaseModalOpen(false)}
-                    title="Lease Terms"
-                    size="xl"
-                    footer={
-                        <div className="flex w-full items-center justify-end gap-2">
-                            {application.lease_attachment_path && (
-                                <a
-                                    href={`/storage/${application.lease_attachment_path}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white"
-                                >
-                                    Open PDF Attachment
-                                </a>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => setLeaseModalOpen(false)}
-                                className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    }
-                >
-                    <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-[#15233d]/10 bg-[#f8fafc] p-4 text-sm text-[#334155]">
-                        <p className="whitespace-pre-wrap">{application.lease_terms}</p>
+            <Modal
+                open={showPaymentModal}
+                onClose={() => setShowPaymentModal(false)}
+                title="Payment Successful"
+                size="sm"
+                footer={
+                    <button
+                        type="button"
+                        onClick={() => setShowPaymentModal(false)}
+                        className="rounded-lg bg-[#15233d] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f1a2d]"
+                    >
+                        Done
+                    </button>
+                }
+            >
+                <div className="space-y-4 py-2 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+                        <svg className="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
                     </div>
-                </Modal>
-            )}
+                    <h3 className="text-lg font-bold text-[#15233d]">GCash Payment Complete</h3>
+                    <p className="text-sm leading-relaxed text-[#42506b]">
+                        Your payment has been received and your application is now marked as paid.
+                        The admin will confirm your move-in shortly.
+                    </p>
+                </div>
+            </Modal>
         </>
     );
 }
+
+Dashboard.layout = (page) => <PublicLayout children={page} />;

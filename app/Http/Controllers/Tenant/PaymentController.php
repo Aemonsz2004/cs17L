@@ -24,7 +24,7 @@ class PaymentController extends Controller
         return Inertia::render('tenant/TenantApp', [
             'initialPage' => 'pay-rent',
             'unpaidInvoices' => Invoice::where('tenant_id', $tenantId)
-                ->whereIn('status', ['due', 'overdue'])
+                ->whereIn('status', ['due', 'overdue', 'pending'])
                 ->latest()
                 ->get(),
         ]);
@@ -48,39 +48,25 @@ class PaymentController extends Controller
             ->whereIn('status', ['due', 'overdue'])
             ->firstOrFail();
 
-        $this->assertInvoiceMatchesUnit($invoice);
+        $invoice->update([
+            'method' => $data['method'],
+            'status' => 'pending',
+            'reference' => $data['reference'] ?? null,
+            'paid_date' => null,
+            'confirmed_at' => null,
+        ]);
 
-        if ($data['method'] === 'GCash') {
-            $invoice->update([
-                'method' => 'GCash',
-                'reference' => $data['reference'],
-                'paid_date' => null,
-                'confirmed_at' => null,
-            ]);
+        TenantNotificationService::notifyPaymentSubmitted(
+            $invoice,
+            $data['method'],
+            $data['reference'] ?? null,
+        );
 
-            TenantNotificationService::notifyPaymentSubmitted(
-                $invoice,
-                'GCash',
-                $data['reference'],
-            );
+        $successMessage = $data['method'] === 'GCash'
+            ? 'Payment submitted. Please wait for admin confirmation. Ref: '.$data['reference']
+            : 'Cash payment submitted. Please wait for admin confirmation.';
 
-            $successMessage = 'Payment submitted. Please wait for admin confirmation.';
-            $successMessage .= ' Ref: '.$data['reference'];
-
-            return redirect()->route('tenant.pay-rent')->with('success', $successMessage);
-        }
-
-        if ($data['method'] === 'Cash') {
-            $invoice->update(['method' => 'Cash']);
-            TenantNotificationService::notifyPaymentSubmitted(
-                $invoice,
-                'Cash',
-                null,
-            );
-
-            return redirect()->route('tenant.pay-rent')
-                ->with('success', 'Cash payment submitted. Please wait for admin confirmation.');
-        }
+        return redirect()->route('tenant.pay-rent')->with('success', $successMessage);
 
         return redirect()->route('tenant.pay-rent')->with('error', 'Invalid payment method.');
     }
@@ -94,6 +80,11 @@ class PaymentController extends Controller
 
     private function assertInvoiceMatchesUnit(Invoice $invoice): void
     {
+        // Deposit invoices use a fixed deposit amount, not rent+utilities+penalty
+        if ($invoice->period === 'Deposit') {
+            return;
+        }
+
         $expectedTotal = (int) $invoice->rent + (int) $invoice->utilities + (int) $invoice->penalty;
 
         if ((int) $invoice->total !== $expectedTotal) {

@@ -82,6 +82,17 @@ class TenantNotificationService
                 'Payment confirmed: Invoice %s has been marked as paid.',
                 $invoice->invoice_no
             ),
+            'tenant_id' => null,
+            'unread' => true,
+        ]);
+
+        RtmsNotification::create([
+            'variant' => 'teal',
+            'category' => 'payment',
+            'message' => sprintf(
+                'Your payment for Invoice %s has been confirmed as paid.',
+                $invoice->invoice_no
+            ),
             'tenant_id' => $invoice->tenant_id,
             'unread' => true,
         ]);

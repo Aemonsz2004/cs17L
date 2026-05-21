@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Applicant;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreApplicantRegisterRequest;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,12 +18,9 @@ class RegisterController extends Controller
         return Inertia::render('applicant/Register');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreApplicantRegisterRequest $request): RedirectResponse
     {
-        $data = $request->validate([
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
+        $data = $request->validated();
 
         $localName = explode('@', $data['email'])[0] ?? 'Applicant';
 

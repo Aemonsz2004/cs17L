@@ -2,12 +2,6 @@
 
 namespace App\Providers;
 
-use App\Events\LeaseAcceptedEvent;
-use App\Events\PaymentVerifiedEvent;
-use App\Events\TenantCreatedEvent;
-use App\Listeners\AutoConvertTenantOnPaymentVerified;
-use App\Listeners\NotifyAdminOnLeaseAccepted;
-use App\Listeners\NotifyAdminOnTenantCreated;
 use App\Support\MailConfigurationGuard;
 use Carbon\CarbonImmutable;
 use Illuminate\Mail\Events\MessageSending;
@@ -45,21 +39,6 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(MessageSending::class, function (): void {
             app(MailConfigurationGuard::class)->assertConfigured();
         });
-
-        Event::listen(
-            PaymentVerifiedEvent::class,
-            AutoConvertTenantOnPaymentVerified::class,
-        );
-
-        Event::listen(
-            LeaseAcceptedEvent::class,
-            NotifyAdminOnLeaseAccepted::class,
-        );
-
-        Event::listen(
-            TenantCreatedEvent::class,
-            NotifyAdminOnTenantCreated::class,
-        );
 
         DB::prohibitDestructiveCommands(
             app()->isProduction(),

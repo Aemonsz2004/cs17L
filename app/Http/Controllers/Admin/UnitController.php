@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreUnitRequest;
+use App\Http\Requests\UpdateUnitRequest;
 use App\Models\Tenant;
 use App\Models\Unit;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,31 +33,17 @@ class UnitController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreUnitRequest $request): RedirectResponse
     {
-        $request->merge([
-            'number' => strtoupper(trim((string) $request->input('number'))),
-        ]);
-
-        $data = $request->validate([
-            'number' => ['required', 'string', 'max:10', Rule::unique('units', 'number')],
-            'floor' => ['required', 'in:GF,1F,2F,3F'],
-            'type' => ['required', 'in:Office,Retail,Medical'],
-            'area' => ['required', 'integer', 'min:1'],
-            'base_rent' => ['required', 'integer', 'min:0'],
-
-            'tenant_id' => ['nullable', 'exists:tenants,id'],
-            'description' => ['nullable', 'string', 'max:1000'],
-            'gallery' => ['nullable', 'array'],
-            'gallery.*' => ['file', 'image', 'max:5120'],
-            'status' => ['required', Rule::in(['vacant', 'occupied', 'maintenance', 'pending', 'reserved'])],
-        ]);
+        $data = $request->validated();
 
         if ($request->hasFile('gallery')) {
             $data['gallery'] = collect($request->file('gallery'))
                 ->map(fn ($file) => Storage::url($file->store('units/gallery', 'public')))
                 ->values()
                 ->all();
+        } elseif (array_key_exists('gallery', $data)) {
+            unset($data['gallery']);
         }
 
         $data['status'] = $data['status'] ?? 'vacant';
@@ -67,26 +53,9 @@ class UnitController extends Controller
         return redirect()->route('admin.units.index')->with('success', 'Unit created.');
     }
 
-    public function update(Request $request, Unit $unit): RedirectResponse
+    public function update(UpdateUnitRequest $request, Unit $unit): RedirectResponse
     {
-        if ($request->has('number')) {
-            $request->merge([
-                'number' => strtoupper(trim((string) $request->input('number'))),
-            ]);
-        }
-
-        $data = $request->validate([
-            'number' => ['sometimes', 'string', 'max:10', Rule::unique('units', 'number')->ignore($unit->id)],
-            'floor' => ['sometimes', 'in:GF,1F,2F,3F'],
-            'type' => ['sometimes', 'in:Office,Retail,Medical'],
-            'area' => ['sometimes', 'integer', 'min:1'],
-            'base_rent' => ['sometimes', 'integer', 'min:0'],
-            'status' => ['sometimes', 'in:occupied,vacant,reserved,maintenance,pending'],
-            'tenant_id' => ['nullable', 'exists:tenants,id'],
-            'description' => ['sometimes', 'nullable', 'string', 'max:1000'],
-            'gallery' => ['sometimes', 'nullable', 'array'],
-            'gallery.*' => ['file', 'image', 'max:5120'],
-        ]);
+        $data = $request->validated();
 
         if ($request->hasFile('gallery')) {
             $data['gallery'] = collect($request->file('gallery'))

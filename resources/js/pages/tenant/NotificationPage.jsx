@@ -81,17 +81,27 @@ export default function TenantNotificationsPage({ notifications, archivedNotific
         if (!window.confirm('Archive this notification?')) {
             return;
         }
-        router.delete(`/tenant/notifications/${selected.id}`);
+        router.delete(`/tenant/notifications/${selected.id}`, {
+            onSuccess: () => {
+                setDetailOpen(false);
+                setSelected(null);
+            },
+        });
     };
     const restoreNotification = () => {
         if (!selected) return;
         if (!window.confirm('Restore this notification?')) {
             return;
         }
-        router.post(`/tenant/notifications/${selected.id}/restore`);
+        router.post(`/tenant/notifications/${selected.id}/restore`, {}, {
+            onSuccess: () => {
+                setDetailOpen(false);
+                setSelected(null);
+            },
+        });
     };
     return (
-        <div className="max-w-3xl space-y-5">
+        <div className="space-y-5">
             <div className="flex items-center justify-end">
                 <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
                     {['active', 'archived'].map((tab) => (

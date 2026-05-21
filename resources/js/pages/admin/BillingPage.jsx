@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
+import ConfirmModal from '../../components/ConfirmModal';
 import InfoRow from '../../components/InfoRow';
 import { Input, Select } from '../../components/Input';
 import MetricCard from '../../components/MetricCard';
@@ -10,15 +11,10 @@ import Modal from '../../components/Modal';
 import Table from '../../components/Table';
 import { formatDateDisplay } from '../../lib/date';
 const statusBadge = (s) => {
-    if (s === 'paid') {
-        return <Badge variant="green">Paid</Badge>;
-    }
-    if (s === 'due') {
-        return <Badge variant="amber">Due</Badge>;
-    }
-    if (s === 'overdue') {
-        return <Badge variant="red">Overdue</Badge>;
-    }
+    if (s === 'paid') return <Badge variant="green">Paid</Badge>;
+    if (s === 'due') return <Badge variant="amber">Due</Badge>;
+    if (s === 'overdue') return <Badge variant="red">Overdue</Badge>;
+    if (s === 'pending') return <Badge variant="amber">Pending</Badge>;
     return null;
 };
 const methodBadge = (m) => {
@@ -46,7 +42,10 @@ export default function BillingPage({ openAddSignal = 0 }) {
                 invoiceNo: invoice.invoice_no,
                 tenantId: invoice.tenant_id,
                 tenant: invoice.tenant?.name ?? `Tenant #${invoice.tenant_id}`,
-                unit: (invoice.tenant?.units ?? []).map((u) => u.number).join(', ') || '-',
+                unit:
+                    (invoice.tenant?.units ?? [])
+                        .map((u) => u.number)
+                        .join(', ') || '-',
                 period: invoice.period,
                 rent: invoice.rent,
                 utilities: invoice.utilities,
@@ -67,7 +66,10 @@ export default function BillingPage({ openAddSignal = 0 }) {
                 invoiceNo: invoice.invoice_no,
                 tenantId: invoice.tenant_id,
                 tenant: invoice.tenant?.name ?? `Tenant #${invoice.tenant_id}`,
-                unit: (invoice.tenant?.units ?? []).map((u) => u.number).join(', ') || '-',
+                unit:
+                    (invoice.tenant?.units ?? [])
+                        .map((u) => u.number)
+                        .join(', ') || '-',
                 period: invoice.period,
                 rent: invoice.rent,
                 utilities: invoice.utilities,
@@ -88,6 +90,8 @@ export default function BillingPage({ openAddSignal = 0 }) {
     const [addOpen, setAddOpen] = useState(false);
     const [viewMode, setViewMode] = useState('active');
     const lastHandledSignal = useRef(openAddSignal);
+    const [addErrors, setAddErrors] = useState({});
+    const [addSaving, setAddSaving] = useState(false);
     const [form, setForm] = useState({
         tenantId: String(tenantRows?.[0]?.id ?? 1),
         period: '',
@@ -95,7 +99,6 @@ export default function BillingPage({ openAddSignal = 0 }) {
         rent: '',
         utilities: '',
         penalty: '',
-        method: 'GCash',
     });
     useEffect(() => {
         if (openAddSignal !== lastHandledSignal.current) {
@@ -115,7 +118,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
             .filter((i) => i.status === 'paid')
             .reduce((s, i) => s + i.total, 0);
         const pending = visibleInvoices
-            .filter((i) => i.status === 'due')
+            .filter((i) => i.status === 'due' || i.status === 'pending')
             .reduce((s, i) => s + i.total, 0);
         const overdueAmt = visibleInvoices
             .filter((i) => i.status === 'overdue')
@@ -130,68 +133,137 @@ export default function BillingPage({ openAddSignal = 0 }) {
         const matchStatus = filterStatus === 'all' || i.status === filterStatus;
         return matchSearch && matchStatus;
     });
+    const [confirmAction, setConfirmAction] = useState(null);
+    const closeDetail = () => {
+        setDetailOpen(false);
+        setSelected(null);
+    };
+
     const markAsPaid = () => {
         if (!selected) return;
-        if (!window.confirm('Mark this invoice as paid?')) {
-            return;
-        }
-        router.patch(`/admin/billing/${selected.id}/mark-paid`);
+        setConfirmAction({ type: 'markPaid' });
+    };
+    const confirmMarkPaid = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.patch(
+            `/admin/billing/${selected.id}/mark-paid`,
+            {},
+            { onSuccess: closeDetail },
+        );
     };
 
     const markAsOverdue = () => {
         if (!selected) return;
-        if (!window.confirm('Mark this invoice as overdue?')) {
-            return;
-        }
-        router.patch(`/admin/billing/${selected.id}/mark-overdue`);
+        setConfirmAction({ type: 'markOverdue' });
+    };
+    const confirmMarkOverdue = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.patch(
+            `/admin/billing/${selected.id}/mark-overdue`,
+            {},
+            { onSuccess: closeDetail },
+        );
     };
 
     const confirmBankTransfer = () => {
         if (!selected) return;
-        if (!window.confirm(`Confirm Bank Transfer for Invoice ${selected.invoiceNo}?`)) {
-            return;
-        }
-        router.patch(`/admin/billing/${selected.id}/confirm-bank`);
+        setConfirmAction({
+            type: 'bankTransfer',
+            invoiceNo: selected.invoiceNo,
+        });
+    };
+    const confirmBankTransferAction = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.patch(
+            `/admin/billing/${selected.id}/confirm-bank`,
+            {},
+            { onSuccess: closeDetail },
+        );
     };
     const archiveInvoice = () => {
         if (!selected) return;
-        if (!window.confirm('Archive this invoice?')) {
-            return;
-        }
-        router.delete(`/admin/billing/${selected.id}`);
+        setConfirmAction({ type: 'archive' });
+    };
+    const confirmArchive = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.delete(`/admin/billing/${selected.id}`, {
+            onSuccess: closeDetail,
+        });
     };
     const restoreInvoice = (invoiceId) => {
-        if (!window.confirm('Restore this invoice?')) {
-            return;
+        setConfirmAction({ type: 'restore', invoiceId });
+    };
+    const confirmRestore = () => {
+        if (!confirmAction) return;
+        setConfirmAction(null);
+        router.post(
+            `/admin/billing/${confirmAction.invoiceId}/restore`,
+            {},
+            { onSuccess: closeDetail },
+        );
+    };
+    const scrollToFirstError = (errors) => {
+        if (!errors) return;
+        const keys = Object.keys(errors);
+        if (keys.length === 0) return;
+        const firstKey = keys[0];
+        const el = document.getElementById(firstKey);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus({ preventScroll: true });
         }
-        router.post(`/admin/billing/${invoiceId}/restore`);
     };
     const createInvoice = () => {
-        const tenant = (tenantRows ?? []).find(
-            (t) => String(t.id) === form.tenantId,
+        setAddErrors({});
+        setAddSaving(true);
+        router.post(
+            '/admin/billing',
+            {
+                tenant_id: Number(form.tenantId),
+                period: form.period,
+                due_date: form.dueDate,
+                rent: Number(form.rent || 0),
+                utilities: Number(form.utilities || 0),
+                penalty: Number(form.penalty || 0),
+                status: 'due',
+            },
+            {
+                onSuccess: () => {
+                    setAddSaving(false);
+                    setAddOpen(false);
+                    setForm({
+                        tenantId: String(tenantRows?.[0]?.id ?? 1),
+                        period: '',
+                        dueDate: '',
+                        rent: '',
+                        utilities: '',
+                        penalty: '',
+                    });
+                    setAddErrors({});
+                },
+                onError: (errors) => {
+                    setAddSaving(false);
+                    const mapped = {};
+                    for (const [key, val] of Object.entries(errors || {})) {
+                        mapped[
+                            key.replace(/_([a-z])/g, (_, c) => c.toUpperCase())
+                        ] = val;
+                    }
+                    setAddErrors(mapped);
+                    scrollToFirstError(mapped);
+                },
+            },
         );
-        if (!tenant || !form.period || !form.dueDate || !form.rent) {
-            return;
-        }
-        if (!window.confirm('Generate this invoice?')) {
-            return;
-        }
-        router.post('/admin/billing', {
-            tenant_id: Number(form.tenantId),
-            period: form.period,
-            due_date: form.dueDate,
-            rent: Number(form.rent || 0),
-            utilities: Number(form.utilities || 0),
-            penalty: Number(form.penalty || 0),
-            method: form.method,
-            status: 'due',
-        });
     };
     const pendingBankTransfers = invoices.filter(
         (i) => i.method === 'Bank Transfer' && i.status === 'due',
     );
     const pendingCashPayments = invoices.filter(
-        (i) => i.method === 'Cash' && i.status === 'due',
+        (i) => i.method === 'Cash' && i.status === 'pending',
     );
 
     const columns = [
@@ -241,7 +313,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
             label: '',
             width: 80,
             align: 'right',
-            render: (_, row) => (
+            render: (_, row) =>
                 viewMode === 'active' ? (
                     <Button
                         variant="ghost"
@@ -265,8 +337,7 @@ export default function BillingPage({ openAddSignal = 0 }) {
                     >
                         Restore
                     </Button>
-                )
-            ),
+                ),
         },
     ];
     return (
@@ -302,14 +373,20 @@ export default function BillingPage({ openAddSignal = 0 }) {
             {viewMode === 'active' && pendingBankTransfers.length > 0 && (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                     <p className="mb-2 text-sm font-semibold text-amber-700">
-                        {pendingBankTransfers.length} Bank Transfer{pendingBankTransfers.length !== 1 ? 's' : ''} Awaiting Confirmation
+                        {pendingBankTransfers.length} Bank Transfer
+                        {pendingBankTransfers.length !== 1 ? 's' : ''} Awaiting
+                        Confirmation
                     </p>
                     <div className="space-y-2">
                         {pendingBankTransfers.map((inv) => (
-                            <div key={inv.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
+                            <div
+                                key={inv.id}
+                                className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm"
+                            >
                                 <div>
                                     <p className="font-semibold text-amber-900">
-                                        {inv.invoiceNo} · {inv.tenant}
+                                        {inv.invoiceNo} · {inv.tenant} ·{' '}
+                                        {inv.unit}
                                     </p>
                                     <p className="text-xs text-amber-700">
                                         Ref: {inv.reference}
@@ -334,17 +411,24 @@ export default function BillingPage({ openAddSignal = 0 }) {
             {viewMode === 'active' && pendingCashPayments.length > 0 && (
                 <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                     <p className="mb-2 text-sm font-semibold text-emerald-700">
-                        {pendingCashPayments.length} Cash Payment{pendingCashPayments.length !== 1 ? 's' : ''} Awaiting Confirmation
+                        {pendingCashPayments.length} Cash Payment
+                        {pendingCashPayments.length !== 1 ? 's' : ''} Awaiting
+                        Confirmation
                     </p>
                     <div className="space-y-2">
                         {pendingCashPayments.map((inv) => (
-                            <div key={inv.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm">
+                            <div
+                                key={inv.id}
+                                className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-sm"
+                            >
                                 <div>
                                     <p className="font-semibold text-emerald-900">
-                                        {inv.invoiceNo} · {inv.tenant}
+                                        {inv.invoiceNo} · {inv.tenant} ·{' '}
+                                        {inv.unit}
                                     </p>
                                     <p className="text-xs text-emerald-700">
-                                        P{inv.total.toLocaleString()} · {inv.period}
+                                        P{inv.total.toLocaleString()} ·{' '}
+                                        {inv.period}
                                     </p>
                                 </div>
                                 <Button
@@ -365,7 +449,9 @@ export default function BillingPage({ openAddSignal = 0 }) {
 
             <Card>
                 <Card.Header
-                    title={viewMode === 'active' ? 'Invoices' : 'Archived Invoices'}
+                    title={
+                        viewMode === 'active' ? 'Invoices' : 'Archived Invoices'
+                    }
                     action={
                         <div className="flex items-center gap-2">
                             <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
@@ -424,7 +510,8 @@ export default function BillingPage({ openAddSignal = 0 }) {
                     }}
                 />
                 <Card.Footer>
-                    Showing {filtered.length} of {visibleInvoices.length} invoices
+                    Showing {filtered.length} of {visibleInvoices.length}{' '}
+                    invoices
                 </Card.Footer>
             </Card>
 
@@ -520,16 +607,17 @@ export default function BillingPage({ openAddSignal = 0 }) {
                             value={methodBadge(selected.method)}
                         />
                     )}
-                    {selected.method === 'Bank Transfer' && selected.reference && (
-                        <InfoRow
-                            label="Bank Reference"
-                            value={
-                                <span className="font-mono text-sm text-[#5C6B88]">
-                                    {selected.reference}
-                                </span>
-                            }
-                        />
-                    )}
+                    {selected.method === 'Bank Transfer' &&
+                        selected.reference && (
+                            <InfoRow
+                                label="Bank Reference"
+                                value={
+                                    <span className="font-mono text-sm text-[#5C6B88]">
+                                        {selected.reference}
+                                    </span>
+                                }
+                            />
+                        )}
 
                     <div className="mt-4 space-y-0 border-t border-[#1B2B4B]/8 pt-4">
                         <InfoRow
@@ -564,19 +652,29 @@ export default function BillingPage({ openAddSignal = 0 }) {
 
             <Modal
                 open={addOpen}
-                onClose={() => setAddOpen(false)}
+                onClose={() => {
+                    setAddOpen(false);
+                    setAddErrors({});
+                }}
                 title="Create New Invoice"
                 size="md"
                 footer={
                     <>
                         <Button
                             variant="ghost"
-                            onClick={() => setAddOpen(false)}
+                            onClick={() => {
+                                setAddOpen(false);
+                                setAddErrors({});
+                            }}
                         >
                             Cancel
                         </Button>
-                        <Button variant="primary" onClick={createInvoice}>
-                            Generate Invoice
+                        <Button
+                            variant="primary"
+                            onClick={createInvoice}
+                            loading={addSaving}
+                        >
+                            {addSaving ? 'Generating...' : 'Generate Invoice'}
                         </Button>
                     </>
                 }
@@ -586,49 +684,124 @@ export default function BillingPage({ openAddSignal = 0 }) {
                         <Select
                             label="Tenant"
                             value={form.tenantId}
-                            onChange={(e) =>
+                            onChange={(e) => {
                                 setForm((f) => ({
                                     ...f,
                                     tenantId: e.target.value,
-                                }))
-                            }
+                                }));
+                                if (addErrors.tenantId) {
+                                    setAddErrors((e) => ({
+                                        ...e,
+                                        tenantId: undefined,
+                                    }));
+                                }
+                            }}
                             full
                         >
                             {(tenantRows ?? []).map((t) => (
                                 <option key={t.id} value={t.id}>
-                                    {t.name} - Unit {(t.units ?? []).map((u) => u.number).join(', ') || '-'}
+                                    {t.name}
                                 </option>
                             ))}
                         </Select>
+                        {addErrors.tenantId && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.tenantId}
+                            </p>
+                        )}
+                        {(() => {
+                            const t = (tenantRows ?? []).find(
+                                (t) => String(t.id) === form.tenantId,
+                            );
+                            const units = (t?.units ?? [])
+                                .map((u) => u.number)
+                                .join(', ');
+                            return units ? (
+                                <p className="mt-1 text-xs text-[#5C6B88]">
+                                    Unit{' '}
+                                    <span className="font-semibold text-[#1B2B4B]">
+                                        {units}
+                                    </span>
+                                </p>
+                            ) : null;
+                        })()}
                     </div>
-                    <Input
-                        label="Billing Period"
-                        placeholder="e.g. April 2026"
-                        value={form.period}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, period: e.target.value }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Due Date"
-                        type="date"
-                        value={form.dueDate}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, dueDate: e.target.value }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Rent Amount"
-                        placeholder="0.00"
-                        type="number"
-                        value={form.rent}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, rent: e.target.value }))
-                        }
-                        full
-                    />
+                    <div>
+                        <Input
+                            label="Billing Period"
+                            placeholder="e.g. April 2026"
+                            value={form.period}
+                            onChange={(e) => {
+                                setForm((f) => ({
+                                    ...f,
+                                    period: e.target.value,
+                                }));
+                                if (addErrors.period) {
+                                    setAddErrors((e) => ({
+                                        ...e,
+                                        period: undefined,
+                                    }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.period && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.period}
+                            </p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Due Date"
+                            type="date"
+                            value={form.dueDate}
+                            onChange={(e) => {
+                                setForm((f) => ({
+                                    ...f,
+                                    dueDate: e.target.value,
+                                }));
+                                if (addErrors.dueDate) {
+                                    setAddErrors((e) => ({
+                                        ...e,
+                                        dueDate: undefined,
+                                    }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.dueDate && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.dueDate}
+                            </p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Rent Amount"
+                            placeholder="0.00"
+                            type="number"
+                            value={form.rent}
+                            onChange={(e) => {
+                                setForm((f) => ({
+                                    ...f,
+                                    rent: e.target.value,
+                                }));
+                                if (addErrors.rent) {
+                                    setAddErrors((e) => ({
+                                        ...e,
+                                        rent: undefined,
+                                    }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.rent && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.rent}
+                            </p>
+                        )}
+                    </div>
                     <Input
                         label="Utilities"
                         placeholder="0.00"
@@ -652,19 +825,61 @@ export default function BillingPage({ openAddSignal = 0 }) {
                         }
                         full
                     />
-                    <Select
-                        label="Preferred Method"
-                        value={form.method}
-                        onChange={(e) =>
-                            setForm((f) => ({ ...f, method: e.target.value }))
-                        }
-                        full
-                    >
-                        <option value="GCash">GCash</option>
-                        <option value="Cash">Cash</option>
-                    </Select>
                 </div>
             </Modal>
+
+            {confirmAction && (
+                <ConfirmModal
+                    open
+                    onClose={() => setConfirmAction(null)}
+                    onConfirm={() => {
+                        if (confirmAction.type === 'archive') confirmArchive();
+                        if (confirmAction.type === 'restore') confirmRestore();
+                        if (confirmAction.type === 'markPaid')
+                            confirmMarkPaid();
+                        if (confirmAction.type === 'markOverdue')
+                            confirmMarkOverdue();
+                        if (confirmAction.type === 'bankTransfer')
+                            confirmBankTransferAction();
+                    }}
+                    title={
+                        confirmAction.type === 'archive'
+                            ? 'Archive Invoice'
+                            : confirmAction.type === 'restore'
+                              ? 'Restore Invoice'
+                              : confirmAction.type === 'markPaid'
+                                ? 'Mark as Paid'
+                                : confirmAction.type === 'markOverdue'
+                                  ? 'Mark as Overdue'
+                                  : 'Confirm Bank Transfer'
+                    }
+                    message={
+                        confirmAction.type === 'archive'
+                            ? 'Archive this invoice?'
+                            : confirmAction.type === 'restore'
+                              ? 'Restore this invoice?'
+                              : confirmAction.type === 'markPaid'
+                                ? 'Mark this invoice as paid?'
+                                : confirmAction.type === 'markOverdue'
+                                  ? 'Mark this invoice as overdue?'
+                                  : `Confirm Bank Transfer for Invoice ${confirmAction.invoiceNo}?`
+                    }
+                    variant={
+                        confirmAction.type === 'archive' ? 'danger' : 'primary'
+                    }
+                    confirmLabel={
+                        confirmAction.type === 'archive'
+                            ? 'Archive'
+                            : confirmAction.type === 'restore'
+                              ? 'Restore'
+                              : confirmAction.type === 'markPaid'
+                                ? 'Mark as Paid'
+                                : confirmAction.type === 'markOverdue'
+                                  ? 'Mark as Overdue'
+                                  : 'Confirm Transfer'
+                    }
+                />
+            )}
         </div>
     );
 }

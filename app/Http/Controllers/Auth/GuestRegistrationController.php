@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreGuestRegistrationRequest;
 use App\Mail\TenantWelcomeMail;
 use App\Models\RtmsNotification;
 use App\Models\Tenant;
@@ -24,18 +25,11 @@ class GuestRegistrationController extends Controller
         return Inertia::render('GuestRegister', ['units' => $units]);
     }
 
-    public function store(Request $request)
+    public function store(StoreGuestRegistrationRequest $request)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:tenants,email|unique:users,email',
-            'contact' => 'nullable|string|max:255',
-            'phone' => 'required|string|max:20',
-            'unit_id' => 'required|exists:units,id',
-            'payment_method' => 'required|in:GCash,Bank Transfer,Cash',
-        ]);
+        $data = $request->validated();
 
-        $unit = Unit::where('id', $data['unit_id'])
+        $unit = Unit::whereKey($data['unit_id'])
             ->where('status', 'vacant')
             ->lockForUpdate()
             ->first();

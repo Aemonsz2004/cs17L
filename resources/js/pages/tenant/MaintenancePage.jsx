@@ -4,6 +4,7 @@ import { router } from '@inertiajs/react';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
+import ConfirmModal from '../../components/ConfirmModal';
 import { Input, Select, Textarea } from '../../components/Input';
 import Modal from '../../components/Modal';
 import { usePage } from '@inertiajs/react';
@@ -26,13 +27,15 @@ const typeIcon = {
     General: '🔨',
 };
 export default function TenantMaintenancePage({ maintenance }) {
-    const { archivedMaintenance } = usePage().props;
+    const { archivedMaintenance, auth, tenantUnit } = usePage().props;
     const [selected, setSelected] = useState(null);
     const [detailOpen, setDetailOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('all');
     const [viewMode, setViewMode] = useState('active');
+    const [addErrors, setAddErrors] = useState({});
+    const [addSaving, setAddSaving] = useState(false);
     const [form, setForm] = useState({
         title: '',
         type: 'General',
@@ -90,39 +93,105 @@ export default function TenantMaintenancePage({ maintenance }) {
                 .includes(q);
         return matchStatus && matchSearch;
     });
+    const [confirmAction, setConfirmAction] = useState(null);
+    const scrollToFirstError = (errors) => {
+        if (!errors) return;
+        const keys = Object.keys(errors);
+        if (keys.length === 0) return;
+        const firstKey = keys[0];
+        const el = document.getElementById(firstKey);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus({ preventScroll: true });
+        }
+    };
     const open = requests.filter((m) => m.status === 'open').length;
     const inProgress = requests.filter((m) => m.status === 'inprogress').length;
     const resolved = requests.filter((m) => m.status === 'resolved').length;
     const submitRequest = () => {
-        if (viewMode !== 'active') {
-            return;
-        }
-        if (!form.title.trim() || !form.notes.trim()) {
-            return;
-        }
-        router.post('/tenant/maintenance', {
-            title: form.title.trim(),
-            type: form.type,
-            priority: form.priority,
-            notes: form.notes.trim(),
-        });
+        if (viewMode !== 'active') return;
+        setAddErrors({});
+        setAddSaving(true);
+        router.post(
+            '/tenant/maintenance',
+            {
+                title: form.title.trim(),
+                type: form.type,
+                priority: form.priority,
+                notes: form.notes.trim(),
+            },
+            {
+                onSuccess: () => {
+                    setAddSaving(false);
+                    setAddOpen(false);
+                    setForm({
+                        title: '',
+                        type: 'General',
+                        priority: 'medium',
+                        notes: '',
+                    });
+                    setAddErrors({});
+                },
+                onError: (errors) => {
+                    setAddSaving(false);
+                    setAddErrors(errors || {});
+                    scrollToFirstError(errors);
+                },
+            },
+        );
+    };
+    const markDone = () => {
+        if (!selected) return;
+        setConfirmAction({ type: 'markDone' });
+    };
+    const confirmMarkDone = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.post(
+            `/tenant/maintenance/${selected.id}/mark-done`,
+            {},
+            {
+                onSuccess: () => {
+                    setDetailOpen(false);
+                    setSelected(null);
+                },
+            },
+        );
     };
     const archiveRequest = () => {
         if (!selected) return;
-        if (!window.confirm('Archive this request?')) {
-            return;
-        }
-        router.delete(`/tenant/maintenance/${selected.id}`);
+        setConfirmAction({ type: 'archive' });
+    };
+    const confirmArchive = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.delete(`/tenant/maintenance/${selected.id}`, {
+            onSuccess: () => {
+                setDetailOpen(false);
+                setSelected(null);
+            },
+        });
     };
     const restoreRequest = () => {
         if (!selected) return;
-        if (!window.confirm('Restore this request?')) {
-            return;
-        }
-        router.post(`/tenant/maintenance/${selected.id}/restore`);
+        setConfirmAction({ type: 'restore' });
+    };
+    const confirmRestore = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.post(
+            `/tenant/maintenance/${selected.id}/restore`,
+            {},
+            {
+                onSuccess: () => {
+                    setDetailOpen(false);
+                    setSelected(null);
+                },
+            },
+        );
     };
     return (
-        <div className="max-w-4xl space-y-5">
+        <div className="space-y-5">
             <div className="flex items-center justify-end">
                 <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
                     {['active', 'archived'].map((tab) => (
@@ -317,21 +386,33 @@ export default function TenantMaintenancePage({ maintenance }) {
                             >
                                 Close
                             </Button>
-                            {viewMode === 'active' ? (
-                                <Button
-                                    variant="danger"
-                                    onClick={archiveRequest}
-                                >
-                                    Archive
-                                </Button>
-                            ) : (
-                                <Button
-                                    variant="primary"
-                                    onClick={restoreRequest}
-                                >
-                                    Restore
-                                </Button>
-                            )}
+                            <div className="flex gap-2">
+                                {viewMode === 'active' ? (
+                                    <>
+                                        {selected.status !== 'resolved' && (
+                                            <Button
+                                                variant="primary"
+                                                onClick={markDone}
+                                            >
+                                                Mark as Done
+                                            </Button>
+                                        )}
+                                        <Button
+                                            variant="danger"
+                                            onClick={archiveRequest}
+                                        >
+                                            Archive
+                                        </Button>
+                                    </>
+                                ) : (
+                                    <Button
+                                        variant="primary"
+                                        onClick={restoreRequest}
+                                    >
+                                        Restore
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     }
                 >
@@ -434,8 +515,12 @@ export default function TenantMaintenancePage({ maintenance }) {
                         >
                             Cancel
                         </Button>
-                        <Button variant="primary" onClick={submitRequest}>
-                            Submit Request
+                        <Button
+                            variant="primary"
+                            onClick={submitRequest}
+                            loading={addSaving}
+                        >
+                            {addSaving ? 'Submitting...' : 'Submit Request'}
                         </Button>
                     </>
                 }
@@ -444,7 +529,7 @@ export default function TenantMaintenancePage({ maintenance }) {
                     <div className="flex items-center gap-3 rounded-xl bg-[#F5F0E8] px-4 py-3 text-sm">
                         <span className="text-[#5C6B88]">Unit</span>
                         <span className="font-semibold text-[#1B2B4B]">
-                            {requests[0]?.unit ?? '-'}
+                            {tenantUnit ?? '-'}
                         </span>
                         <span className="text-[#5C6B88]">·</span>
                         <span className="text-[#5C6B88]">
@@ -456,26 +541,40 @@ export default function TenantMaintenancePage({ maintenance }) {
 
                     <Input
                         label="Issue Title"
+                        id="title"
                         value={form.title}
-                        onChange={(event) =>
+                        onChange={(event) => {
                             setForm((prev) => ({
                                 ...prev,
                                 title: event.target.value,
-                            }))
-                        }
+                            }));
+                            if (addErrors.title)
+                                setAddErrors((e) => ({
+                                    ...e,
+                                    title: undefined,
+                                }));
+                        }}
                         placeholder="e.g. Leaking sink near pantry"
+                        error={addErrors.title}
                         full
                     />
 
                     <Select
                         label="Issue Type"
+                        id="type"
                         value={form.type}
-                        onChange={(event) =>
+                        onChange={(event) => {
                             setForm((prev) => ({
                                 ...prev,
                                 type: event.target.value,
-                            }))
-                        }
+                            }));
+                            if (addErrors.type)
+                                setAddErrors((e) => ({
+                                    ...e,
+                                    type: undefined,
+                                }));
+                        }}
+                        error={addErrors.type}
                         full
                     >
                         <option value="Electrical">Electrical</option>
@@ -489,13 +588,20 @@ export default function TenantMaintenancePage({ maintenance }) {
 
                     <Select
                         label="Urgency"
+                        id="priority"
                         value={form.priority}
-                        onChange={(event) =>
+                        onChange={(event) => {
                             setForm((prev) => ({
                                 ...prev,
                                 priority: event.target.value,
-                            }))
-                        }
+                            }));
+                            if (addErrors.priority)
+                                setAddErrors((e) => ({
+                                    ...e,
+                                    priority: undefined,
+                                }));
+                        }}
+                        error={addErrors.priority}
                         full
                     >
                         <option value="low">
@@ -505,23 +611,65 @@ export default function TenantMaintenancePage({ maintenance }) {
                         <option value="high">High — As soon as possible</option>
                     </Select>
 
-                    <Input label="Preferred Schedule" type="date" full />
-
                     <Textarea
                         label="Describe the Issue"
+                        id="notes"
                         value={form.notes}
-                        onChange={(event) =>
+                        onChange={(event) => {
                             setForm((prev) => ({
                                 ...prev,
                                 notes: event.target.value,
-                            }))
-                        }
+                            }));
+                            if (addErrors.notes)
+                                setAddErrors((e) => ({
+                                    ...e,
+                                    notes: undefined,
+                                }));
+                        }}
                         placeholder="Please describe the problem in as much detail as possible…"
                         rows={4}
+                        error={addErrors.notes}
                         full
                     />
                 </div>
             </Modal>
+
+            {confirmAction && (
+                <ConfirmModal
+                    open
+                    onClose={() => setConfirmAction(null)}
+                    onConfirm={() => {
+                        if (confirmAction.type === 'markDone')
+                            confirmMarkDone();
+                        if (confirmAction.type === 'archive') confirmArchive();
+                        if (confirmAction.type === 'restore') confirmRestore();
+                    }}
+                    title={
+                        confirmAction.type === 'markDone'
+                            ? 'Mark as Done'
+                            : confirmAction.type === 'archive'
+                              ? 'Archive Request'
+                              : 'Restore Request'
+                    }
+                    message={
+                        confirmAction.type === 'markDone'
+                            ? 'Mark this request as done?'
+                            : confirmAction.type === 'archive'
+                              ? 'Archive this request?'
+                              : 'Restore this request?'
+                    }
+                    variant={
+                        confirmAction.type === 'archive' ? 'danger' : 'primary'
+                    }
+                    confirmLabel={
+                        confirmAction.type === 'markDone'
+                            ? 'Mark as Done'
+                            : confirmAction.type === 'archive'
+                              ? 'Archive'
+                              : 'Restore'
+                    }
+                />
+            )}
         </div>
     );
 }

@@ -1,5 +1,7 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 
+import PublicLayout from '../../components/Layouts/PublicLayout';
+
 export default function UnitsIndex({ property, units = [] }) {
     const authUser = usePage().props?.auth?.user;
     const applyHref = authUser?.role === 'applicant' ? '/apply/form' : '/apply/register';
@@ -17,7 +19,7 @@ export default function UnitsIndex({ property, units = [] }) {
                             </p>
                             <h1 className="text-3xl font-black">Available Units</h1>
                         </div>
-                        <Link href="/" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white">
+                        <Link href="/" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium bg-white hover:bg-gray-50">
                             Back to Landing
                         </Link>
                     </div>
@@ -54,3 +56,5 @@ export default function UnitsIndex({ property, units = [] }) {
         </>
     );
 }
+
+UnitsIndex.layout = (page) => <PublicLayout children={page} />;

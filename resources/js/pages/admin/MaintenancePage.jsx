@@ -4,6 +4,7 @@ import { router, usePage } from '@inertiajs/react';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
+import ConfirmModal from '../../components/ConfirmModal';
 import InfoRow from '../../components/InfoRow';
 import { Input, Select, Textarea } from '../../components/Input';
 import MetricCard from '../../components/MetricCard';
@@ -74,8 +75,10 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
     const [detailOpen, setDetailOpen] = useState(false);
     const [addOpen, setAddOpen] = useState(false);
     const lastHandledSignal = useRef(openAddSignal);
+    const [addErrors, setAddErrors] = useState({});
+    const [addSaving, setAddSaving] = useState(false);
     const [assignTo, setAssignTo] = useState('');
-    const [newRequest, setNewRequest] = useState({
+    const defaultNewRequest = {
         unit: '',
         tenant: '',
         type: 'General',
@@ -83,7 +86,8 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
         assignedTo: '',
         scheduledDate: '',
         description: '',
-    });
+    };
+    const [newRequest, setNewRequest] = useState(defaultNewRequest);
     const currentRequests = viewMode === 'active' ? requests : archivedRequests;
     const open = currentRequests.filter((m) => m.status === 'open').length;
     const inprogress = currentRequests.filter((m) => m.status === 'inprogress').length;
@@ -119,6 +123,7 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
             setSelected(null);
         }
     }, [viewMode]);
+    const [confirmAction, setConfirmAction] = useState(null);
     const updateRequest = (id, updater) => {
         setRequests((prev) =>
             prev.map((request) =>
@@ -136,32 +141,45 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
             selected.status === 'open'
                 ? 'assign and start'
                 : 'mark as resolved';
-        if (!window.confirm(`Confirm ${actionLabel} for this request?`)) {
-            return;
-        }
+        setConfirmAction({ type: 'progress', actionLabel });
+    };
+    const confirmProgress = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        const closeFn = () => {
+            setDetailOpen(false);
+            setSelected(null);
+        };
         if (selected.status === 'open') {
             router.patch(`/admin/maintenance/${selected.id}`, {
                 status: 'inprogress',
                 assigned_to: assignTo || selected.assignedTo || TECHNICIANS[0],
-            });
+            }, { onSuccess: closeFn });
             return;
         }
         router.patch(`/admin/maintenance/${selected.id}`, {
             status: 'resolved',
             resolved_date: new Date().toISOString().slice(0, 10),
             assigned_to: assignTo || selected.assignedTo,
-        });
+        }, { onSuccess: closeFn });
+    };
+    const scrollToFirstError = (errors) => {
+        if (!errors) return;
+        const keys = Object.keys(errors);
+        if (keys.length === 0) return;
+        const firstKey = keys[0];
+        const el = document.getElementById(firstKey);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus({ preventScroll: true });
+        }
     };
     const createRequest = () => {
         if (viewMode !== 'active') {
             return;
         }
-        if (!newRequest.unit || !newRequest.tenant || !newRequest.description) {
-            return;
-        }
-        if (!window.confirm('Submit this maintenance request?')) {
-            return;
-        }
+        setAddErrors({});
+        setAddSaving(true);
         router.post('/admin/maintenance', {
             title: `${newRequest.type} issue`,
             unit: newRequest.unit,
@@ -172,6 +190,18 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
             assigned_to: newRequest.assignedTo || null,
             resolved_date: null,
             notes: newRequest.description,
+        }, {
+            onSuccess: () => {
+                setAddSaving(false);
+                setAddOpen(false);
+                setNewRequest(defaultNewRequest);
+                setAddErrors({});
+            },
+            onError: (errors) => {
+                setAddSaving(false);
+                setAddErrors(errors || {});
+                scrollToFirstError(errors);
+            },
         });
     };
     const columns = [
@@ -232,17 +262,31 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
     ];
     const archiveRequest = () => {
         if (!selected) return;
-        if (!window.confirm('Archive this request?')) {
-            return;
-        }
-        router.delete(`/admin/maintenance/${selected.id}`);
+        setConfirmAction({ type: 'archive' });
+    };
+    const confirmArchive = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.delete(`/admin/maintenance/${selected.id}`, {
+            onSuccess: () => {
+                setDetailOpen(false);
+                setSelected(null);
+            },
+        });
     };
     const restoreRequest = () => {
         if (!selected) return;
-        if (!window.confirm('Restore this request?')) {
-            return;
-        }
-        router.post(`/admin/maintenance/${selected.id}/restore`);
+        setConfirmAction({ type: 'restore' });
+    };
+    const confirmRestore = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        router.post(`/admin/maintenance/${selected.id}/restore`, {}, {
+            onSuccess: () => {
+                setDetailOpen(false);
+                setSelected(null);
+            },
+        });
     };
     return (
         <div className="space-y-5">
@@ -456,56 +500,69 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
             {/* ── New Request Modal ── */}
             <Modal
                 open={addOpen}
-                onClose={() => setAddOpen(false)}
+                onClose={() => {
+                    setAddOpen(false);
+                    setAddErrors({});
+                }}
                 title="New Maintenance Request"
                 size="md"
                 footer={
                     <>
                         <Button
                             variant="ghost"
-                            onClick={() => setAddOpen(false)}
+                            onClick={() => {
+                                setAddOpen(false);
+                                setAddErrors({});
+                            }}
                         >
                             Cancel
                         </Button>
-                        <Button variant="primary" onClick={createRequest}>
-                            Submit Request
+                        <Button variant="primary" onClick={createRequest} loading={addSaving}>
+                            {addSaving ? 'Submitting...' : 'Submit Request'}
                         </Button>
                     </>
                 }
             >
                 <div className="grid grid-cols-2 gap-4">
-                    <Input
-                        label="Unit / Area"
-                        placeholder="e.g. Unit 205"
-                        value={newRequest.unit}
-                        onChange={(e) =>
-                            setNewRequest((prev) => ({
-                                ...prev,
-                                unit: e.target.value,
-                            }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Tenant"
-                        placeholder="Tenant name"
-                        value={newRequest.tenant}
-                        onChange={(e) =>
-                            setNewRequest((prev) => ({
-                                ...prev,
-                                tenant: e.target.value,
-                            }))
-                        }
-                        full
-                    />
+                    <div>
+                        <Input
+                            label="Unit / Area"
+                            placeholder="e.g. Unit 205"
+                            value={newRequest.unit}
+                            onChange={(e) => {
+                                setNewRequest((prev) => ({ ...prev, unit: e.target.value }));
+                                if (addErrors.unit) {
+                                    setAddErrors((e) => ({ ...e, unit: undefined }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.unit && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.unit}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Tenant"
+                            placeholder="Tenant name"
+                            value={newRequest.tenant}
+                            onChange={(e) => {
+                                setNewRequest((prev) => ({ ...prev, tenant: e.target.value }));
+                                if (addErrors.tenant) {
+                                    setAddErrors((e) => ({ ...e, tenant: undefined }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.tenant && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.tenant}</p>
+                        )}
+                    </div>
                     <Select
                         label="Issue Type"
                         value={newRequest.type}
                         onChange={(e) =>
-                            setNewRequest((prev) => ({
-                                ...prev,
-                                type: e.target.value,
-                            }))
+                            setNewRequest((prev) => ({ ...prev, type: e.target.value }))
                         }
                         full
                     >
@@ -521,10 +578,7 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
                         label="Priority"
                         value={newRequest.priority}
                         onChange={(e) =>
-                            setNewRequest((prev) => ({
-                                ...prev,
-                                priority: e.target.value,
-                            }))
+                            setNewRequest((prev) => ({ ...prev, priority: e.target.value }))
                         }
                         full
                     >
@@ -536,10 +590,7 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
                         label="Assign To"
                         value={newRequest.assignedTo}
                         onChange={(e) =>
-                            setNewRequest((prev) => ({
-                                ...prev,
-                                assignedTo: e.target.value,
-                            }))
+                            setNewRequest((prev) => ({ ...prev, assignedTo: e.target.value }))
                         }
                         full
                     >
@@ -553,10 +604,7 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
                         type="date"
                         value={newRequest.scheduledDate}
                         onChange={(e) =>
-                            setNewRequest((prev) => ({
-                                ...prev,
-                                scheduledDate: e.target.value,
-                            }))
+                            setNewRequest((prev) => ({ ...prev, scheduledDate: e.target.value }))
                         }
                         full
                     />
@@ -565,17 +613,49 @@ export default function MaintenancePage({ openAddSignal = 0 }) {
                             label="Description"
                             placeholder="Describe the issue..."
                             value={newRequest.description}
-                            onChange={(e) =>
-                                setNewRequest((prev) => ({
-                                    ...prev,
-                                    description: e.target.value,
-                                }))
-                            }
+                            onChange={(e) => {
+                                setNewRequest((prev) => ({ ...prev, description: e.target.value }));
+                                if (addErrors.description) {
+                                    setAddErrors((e) => ({ ...e, description: undefined }));
+                                }
+                            }}
                             full
                         />
+                        {addErrors.description && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.description}</p>
+                        )}
                     </div>
                 </div>
             </Modal>
+
+            {confirmAction && (
+                <ConfirmModal
+                    open
+                    onClose={() => setConfirmAction(null)}
+                    onConfirm={() => {
+                        if (confirmAction.type === 'archive') confirmArchive();
+                        if (confirmAction.type === 'restore') confirmRestore();
+                        if (confirmAction.type === 'progress') confirmProgress();
+                    }}
+                    title={
+                        confirmAction.type === 'archive' ? 'Archive Request' :
+                        confirmAction.type === 'restore' ? 'Restore Request' :
+                        'Confirm Action'
+                    }
+                    message={
+                        confirmAction.type === 'archive' ? 'Archive this request?' :
+                        confirmAction.type === 'restore' ? 'Restore this request?' :
+                        `Confirm ${confirmAction.actionLabel} for this request?`
+                    }
+                    variant={confirmAction.type === 'progress' ? 'primary' : confirmAction.type === 'archive' ? 'danger' : 'primary'}
+                    confirmLabel={
+                        confirmAction.type === 'archive' ? 'Archive' :
+                        confirmAction.type === 'restore' ? 'Restore' :
+                        confirmAction.actionLabel === 'mark as resolved' ? 'Mark Resolved' :
+                        'Assign & Start'
+                    }
+                />
+            )}
         </div>
     );
 }

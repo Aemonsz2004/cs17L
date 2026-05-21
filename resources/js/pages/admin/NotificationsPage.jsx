@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
+import ConfirmModal from '../../components/ConfirmModal';
 import { Input } from '../../components/Input';
 import MetricCard from '../../components/MetricCard';
 import Modal from '../../components/Modal';
@@ -95,13 +96,16 @@ export default function NotificationsPage({
             ),
         );
     };
+    const [confirmAction, setConfirmAction] = useState(null);
     const markAllRead = () => {
         if (viewMode !== 'active') {
             return;
         }
-        if (!window.confirm('Mark all notifications as read?')) {
-            return;
-        }
+        setConfirmAction({ type: 'markAllRead' });
+    };
+    const confirmMarkAllRead = () => {
+        if (!confirmAction) return;
+        setConfirmAction(null);
         router.post(
             '/admin/notifications/read-all',
             {},
@@ -114,25 +118,52 @@ export default function NotificationsPage({
             prev.map((notification) => ({ ...notification, unread: false })),
         );
     };
+    const closeDetail = () => {
+        setDetailOpen(false);
+        setSelected(null);
+    };
     const archiveNotification = (notification) => {
-        if (!window.confirm('Archive this notification?')) {
-            return;
-        }
+        setConfirmAction({ type: 'archive', notification });
+    };
+    const confirmArchiveNotification = () => {
+        if (!confirmAction) return;
+        const notification = confirmAction.notification;
+        setConfirmAction(null);
         router.delete(`/admin/notifications/${notification.id}`);
         onChangeNotifications((prev) =>
             prev.filter((item) => item.id !== notification.id),
         );
         onChangeArchived((prev) => [notification, ...prev]);
+        closeDetail();
     };
     const restoreNotification = (notification) => {
-        if (!window.confirm('Restore this notification?')) {
-            return;
-        }
+        setConfirmAction({ type: 'restore', notification });
+    };
+    const confirmRestoreNotification = () => {
+        if (!confirmAction) return;
+        const notification = confirmAction.notification;
+        setConfirmAction(null);
         router.post(`/admin/notifications/${notification.id}/restore`);
         onChangeArchived((prev) =>
             prev.filter((item) => item.id !== notification.id),
         );
         onChangeNotifications((prev) => [notification, ...prev]);
+        closeDetail();
+    };
+    const confirmMarkRead = () => {
+        if (!confirmAction) return;
+        const { notificationId } = confirmAction;
+        setConfirmAction(null);
+        markAsRead(notificationId);
+        setSelected((prev) =>
+            prev ? { ...prev, unread: false } : prev,
+        );
+    };
+    const confirmViewMore = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        openDetails(selected);
+        setDetailOpen(false);
     };
     const openDetails = (notification) => {
         markAsRead(notification.id);
@@ -364,23 +395,7 @@ export default function NotificationsPage({
                                 {viewMode === 'active' && selected.unread && (
                                     <Button
                                         variant="outline"
-                                        onClick={() => {
-                                            if (
-                                                window.confirm(
-                                                    'Mark this notification as read?',
-                                                )
-                                            ) {
-                                                markAsRead(selected.id);
-                                                setSelected((prev) =>
-                                                    prev
-                                                        ? {
-                                                              ...prev,
-                                                              unread: false,
-                                                          }
-                                                        : prev,
-                                                );
-                                            }
-                                        }}
+                                        onClick={() => setConfirmAction({ type: 'markRead', notificationId: selected.id })}
                                     >
                                         Mark as Read
                                     </Button>
@@ -388,16 +403,7 @@ export default function NotificationsPage({
                                 {viewMode === 'active' && (
                                     <Button
                                         variant="primary"
-                                        onClick={() => {
-                                            if (
-                                                window.confirm(
-                                                    'Open related page for this notification?',
-                                                )
-                                            ) {
-                                                openDetails(selected);
-                                                setDetailOpen(false);
-                                            }
-                                        }}
+                                        onClick={() => setConfirmAction({ type: 'viewMore' })}
                                     >
                                         View More
                                     </Button>
@@ -441,6 +447,42 @@ export default function NotificationsPage({
                         </p>
                     </div>
                 </Modal>
+            )}
+
+            {confirmAction && (
+                <ConfirmModal
+                    open
+                    onClose={() => setConfirmAction(null)}
+                    onConfirm={() => {
+                        if (confirmAction.type === 'archive') confirmArchiveNotification();
+                        if (confirmAction.type === 'restore') confirmRestoreNotification();
+                        if (confirmAction.type === 'markAllRead') confirmMarkAllRead();
+                        if (confirmAction.type === 'markRead') confirmMarkRead();
+                        if (confirmAction.type === 'viewMore') confirmViewMore();
+                    }}
+                    title={
+                        confirmAction.type === 'archive' ? 'Archive Notification' :
+                        confirmAction.type === 'restore' ? 'Restore Notification' :
+                        confirmAction.type === 'markAllRead' ? 'Mark All as Read' :
+                        confirmAction.type === 'markRead' ? 'Mark as Read' :
+                        'Open Related Page'
+                    }
+                    message={
+                        confirmAction.type === 'archive' ? 'Archive this notification?' :
+                        confirmAction.type === 'restore' ? 'Restore this notification?' :
+                        confirmAction.type === 'markAllRead' ? 'Mark all notifications as read?' :
+                        confirmAction.type === 'markRead' ? 'Mark this notification as read?' :
+                        'Open related page for this notification?'
+                    }
+                    variant={confirmAction.type === 'archive' ? 'danger' : 'primary'}
+                    confirmLabel={
+                        confirmAction.type === 'archive' ? 'Archive' :
+                        confirmAction.type === 'restore' ? 'Restore' :
+                        confirmAction.type === 'markAllRead' ? 'Mark All Read' :
+                        confirmAction.type === 'markRead' ? 'Mark as Read' :
+                        'Open'
+                    }
+                />
             )}
         </div>
     );

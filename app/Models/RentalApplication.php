@@ -12,19 +12,15 @@ class RentalApplication extends Model
 {
     use SoftDeletes;
 
-    public const STATUS_PENDING_REVIEW = 'pending_review';
+    public const STATUS_PENDING = 'pending';
 
     public const STATUS_APPROVED = 'approved';
 
     public const STATUS_REJECTED = 'rejected';
 
-    public const STATUS_LEASE_SENT = 'lease_sent';
-
-    public const STATUS_PAYMENT_PENDING = 'payment_pending';
-
-    public const STATUS_PAYMENT_PAID = 'payment_paid';
-
     public const STATUS_CONVERTED = 'converted';
+
+    public const STATUS_PAID = 'paid';
 
     protected $fillable = [
         'user_id',
@@ -35,23 +31,14 @@ class RentalApplication extends Model
         'emergency_contact',
         'government_id_path',
         'income_proof_path',
+        'preferred_move_in',
+        'lease_duration',
+        'payment_method',
+        'applicant_notes',
         'status',
-        'reserved_at',
-        'reservation_expires_at',
         'rejection_reason',
-        'lease_terms',
-        'lease_attachment_path',
-        'lease_sent_at',
-        'lease_expires_at',
-        'lease_acknowledged_at',
-        'payment_pending_at',
-        'deposit_method',
-        'deposit_reference',
-        'deposit_submitted_at',
-        'payment_verified_at',
-        'payment_paid_at',
-        'deposit_confirmed_at',
         'converted_at',
+        'move_in_confirmed_at',
         'tenant_id',
         'tenant_user_id',
         'admin_id',
@@ -59,17 +46,10 @@ class RentalApplication extends Model
 
     protected $casts = [
         'monthly_income' => 'integer',
-        'reserved_at' => 'datetime',
-        'reservation_expires_at' => 'datetime',
-        'lease_sent_at' => 'datetime',
-        'lease_expires_at' => 'datetime',
-        'lease_acknowledged_at' => 'datetime',
-        'payment_pending_at' => 'datetime',
-        'deposit_submitted_at' => 'datetime',
-        'payment_verified_at' => 'datetime',
-        'payment_paid_at' => 'datetime',
-        'deposit_confirmed_at' => 'datetime',
+        'preferred_move_in' => 'date',
+        'lease_duration' => 'integer',
         'converted_at' => 'datetime',
+        'move_in_confirmed_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

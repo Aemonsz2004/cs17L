@@ -14,9 +14,12 @@ class LeaseController extends Controller
     {
         $tenantId = auth()->user()->tenant_id;
 
+        $tenant = Tenant::with(['units', 'leases', 'leases.unit'])->find($tenantId);
+
         return Inertia::render('tenant/TenantApp', [
             'initialPage' => 'lease',
-            'tenant' => Tenant::find($tenantId),
+            'tenant' => $tenant,
+            'leases' => $tenant?->leases ?? [],
             'invoices' => Invoice::where('tenant_id', $tenantId)->latest()->get(),
         ]);
     }

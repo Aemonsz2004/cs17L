@@ -1,6 +1,7 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { Input } from '../components/Input';
 import Button from '../components/Button';
+import PublicLayout from '../components/Layouts/PublicLayout';
 export default function Login() {
     const { data, setData, post, processing, errors } = useForm({
         email: '',
@@ -86,3 +87,5 @@ export default function Login() {
         </>
     );
 }
+
+Login.layout = (page) => <PublicLayout children={page} />;

@@ -2,6 +2,8 @@ import { Head, useForm } from '@inertiajs/react';
 import Button from '../components/Button';
 import { Input, Select } from '../components/Input';
 
+import PublicLayout from '../components/Layouts/PublicLayout';
+
 export default function GuestRegister({ units }) {
     const { data, setData, post, processing, errors } = useForm({
         name: '',
@@ -9,7 +11,7 @@ export default function GuestRegister({ units }) {
         contact: '',
         phone: '',
         unit_id: '',
-        payment_method: 'gcash',
+        payment_method: 'GCash',
     });
 
     const selectedUnit = units.find(u => u.id.toString() === data.unit_id);
@@ -83,8 +85,8 @@ export default function GuestRegister({ units }) {
                                 setData('payment_method', e.target.value)
                             }
                         >
-                            <option value="gcash">GCash</option>
-                            <option value="cash">Cash (over-the-counter)</option>
+                            <option value="GCash">GCash</option>
+                            <option value="Cash">Cash (over-the-counter)</option>
                         </Select>
                         <Button
                             type="submit"
@@ -100,3 +102,5 @@ export default function GuestRegister({ units }) {
         </>
     );
 }
+
+GuestRegister.layout = (page) => <PublicLayout children={page} />;

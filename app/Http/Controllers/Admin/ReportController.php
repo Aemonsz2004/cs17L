@@ -13,7 +13,7 @@ class ReportController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'reports',
-            'invoices' => Invoice::latest()->get(),
+            'invoices' => Invoice::with('tenant.units')->latest()->get(),
         ]);
     }
 }

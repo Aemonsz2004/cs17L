@@ -26,7 +26,11 @@ class Tenant extends Model
         'deposit',
         'lease_start',
         'lease_end',
+        'lease_duration',
         'payment_method',
+        'occupation',
+        'monthly_income',
+        'emergency_contact',
         'status',
     ];
 
@@ -35,6 +39,8 @@ class Tenant extends Model
         'lease_end' => 'date',
         'rent' => 'integer',
         'deposit' => 'integer',
+        'monthly_income' => 'decimal:2',
+        'lease_duration' => 'integer',
     ];
 
     // ── Relationships ─────────────────────────────────────────────────────────

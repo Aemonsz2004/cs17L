@@ -1,5 +1,7 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 
+import PublicLayout from '../../components/Layouts/PublicLayout';
+
 export default function Landing({ property, featuredUnits = [] }) {
     const authUser = usePage().props?.auth?.user;
     const applyHref = authUser?.role === 'applicant' ? '/apply/form' : '/apply/register';
@@ -11,25 +13,11 @@ export default function Landing({ property, featuredUnits = [] }) {
             <div className="min-h-screen bg-[#f3efe7] text-[#15233d]">
                 <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
                     <div>
-                        <p className="text-xs font-semibold tracking-[0.2em] uppercase text-[#1d7b6e]">
-                            Leasing Portal
-                        </p>
+
                         <h1 className="text-2xl font-bold">{property?.name}</h1>
                     </div>
 
-                    <div className="flex gap-2">
-                        <Link href="/units" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white">
-                            View Units
-                        </Link>
-                        <Link href={applyHref} className="rounded-lg bg-[#15233d] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f1a2d]">
-                            Apply Now
-                        </Link>
-                        {!authUser && (
-                            <Link href="/login" className="rounded-lg border border-[#15233d]/20 px-4 py-2 text-sm font-medium hover:bg-white">
-                                Sign In
-                            </Link>
-                        )}
-                    </div>
+
                 </header>
 
                 <main className="mx-auto max-w-6xl space-y-10 px-6 pb-14">
@@ -110,3 +98,5 @@ export default function Landing({ property, featuredUnits = [] }) {
         </>
     );
 }
+
+Landing.layout = (page) => <PublicLayout children={page} />;

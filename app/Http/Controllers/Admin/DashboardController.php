@@ -16,8 +16,8 @@ class DashboardController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'dashboard',
-            'tenants' => Tenant::latest()->get(),
-            'invoices' => Invoice::with('tenant:id,name,unit')->latest()->get(),
+            'tenants' => Tenant::with('units')->latest()->get(),
+            'invoices' => Invoice::with('tenant:id,name')->latest()->get(),
             'maintenance' => MaintenanceRequest::latest()->get(),
             'units_count' => Unit::count(),
         ]);

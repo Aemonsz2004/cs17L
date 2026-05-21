@@ -70,7 +70,7 @@ export default function MessagesPage({ messages: serverMessages }) {
         }
     });
     return (
-        <div className="flex h-[calc(100vh-56px-48px-48px)] max-w-3xl flex-col gap-4">
+        <div className="flex h-[calc(100vh-56px-48px-48px)] flex-col gap-4">
             {/* ── Chat card ── */}
             <Card className="flex flex-1 flex-col overflow-hidden">
                 {/* Header */}
@@ -152,24 +152,24 @@ export default function MessagesPage({ messages: serverMessages }) {
                 </div>
 
                 {/* Input */}
-                <div className="flex flex-shrink-0 items-center gap-2 border-t border-[#1B2B4B]/8 px-4 py-3">
+                <form
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        sendMessage();
+                    }}
+                    className="flex flex-shrink-0 items-center gap-2 border-t border-[#1B2B4B]/8 px-4 py-3"
+                >
                     <input
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                sendMessage();
-                            }
-                        }}
                         placeholder="Type a message…"
                         className="flex-1 rounded-xl border border-[#1B2B4B]/15 bg-[#F5F0E8]/70 px-4 py-2.5 text-sm text-[#1B2B4B] transition-all outline-none placeholder:text-[#1B2B4B]/30 focus:border-[#24A18F] focus:bg-white focus:ring-2 focus:ring-[#24A18F]/15"
                     />
-                    <Button variant="primary" size="md" onClick={sendMessage}>
+                    <Button variant="primary" size="md" type="submit">
                         Send
                     </Button>
-                </div>
+                </form>
             </Card>
         </div>
     );

@@ -101,17 +101,27 @@ export default function TenantBillingPage({ onPayRent }) {
         if (!window.confirm('Archive this invoice?')) {
             return;
         }
-        router.delete(`/tenant/billing/${selected.id}`);
+        router.delete(`/tenant/billing/${selected.id}`, {
+            onSuccess: () => {
+                setModalOpen(false);
+                setSelected(null);
+            },
+        });
     };
     const restoreInvoice = () => {
         if (!selected) return;
         if (!window.confirm('Restore this invoice?')) {
             return;
         }
-        router.post(`/tenant/billing/${selected.id}/restore`);
+        router.post(`/tenant/billing/${selected.id}/restore`, {}, {
+            onSuccess: () => {
+                setModalOpen(false);
+                setSelected(null);
+            },
+        });
     };
     return (
-        <div className="max-w-4xl space-y-5">
+        <div className="space-y-5">
             <div className="flex items-center justify-end">
                 <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
                     {['active', 'archived'].map((tab) => (

@@ -11,6 +11,16 @@ class Lease extends Model
 {
     use SoftDeletes;
 
+    public const STATUS_PENDING = 'pending';
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_EXPIRED = 'expired';
+
+    public const STATUS_TERMINATED = 'terminated';
+
+    public const STATUS_RENEWED = 'renewed';
+
     protected $fillable = [
         'tenant_id',
         'unit_id',

@@ -1,4 +1,3 @@
-// src/pages/tenant/PayRentPage.jsx
 import { useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import Badge from '../../components/Badge';
@@ -8,135 +7,33 @@ import InfoRow from '../../components/InfoRow';
 import { Input } from '../../components/Input';
 import Modal from '../../components/Modal';
 import { formatDateDisplay } from '../../lib/date';
+
 const METHODS = [
     {
         id: 'gcash',
         label: 'GCash',
-        sub: 'API checkout',
-        detail: 'Creates a demo PayMongo payment intent and lets you simulate success. Reference number is required.',
+        sub: 'Online payment',
+        detail: 'Reference number is required.',
+        icon: 'G',
+        iconClass: 'bg-blue-50 text-blue-600',
+    },
+    {
+        id: 'cash',
+        label: 'Cash',
+        sub: 'Pay in person at the office',
+        detail: 'No reference number needed. The admin will be notified.',
+        icon: '₱',
+        iconClass: 'bg-[#C8963E]/10 text-[#C8963E]',
     },
 ];
+
 export default function PayRentPage() {
-    const { unpaidInvoices, auth } = usePage().props;
+    const { unpaidInvoices, auth, flash } = usePage().props;
     const [method, setMethod] = useState('gcash');
-    const [confirmOpen, setConfirmOpen] = useState(false);
     const [successOpen, setSuccessOpen] = useState(false);
     const [refNo, setRefNo] = useState('');
-    const [demoOpen, setDemoOpen] = useState(false);
-    const [demoLoading, setDemoLoading] = useState(false);
-    const [demoIntent, setDemoIntent] = useState(null);
-    const csrfToken = document
-        .querySelector('meta[name="csrf-token"]')
-        ?.getAttribute('content');
-    const callDemoApi = async (url, method, payload) => {
-        const response = await fetch(url, {
-            method,
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                ...(csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {}),
-            },
-            credentials: 'same-origin',
-            body: method === 'POST' ? JSON.stringify(payload ?? {}) : undefined,
-        });
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || 'Demo API request failed');
-        }
-        return response.json();
-    };
-    const createDemoIntent = async () => {
-        if (!activeInvoice) {
-            return;
-        }
-        setDemoLoading(true);
-        try {
-            const result = await callDemoApi(
-                '/tenant/paymongo/demo/payment-intents',
-                'POST',
-                {
-                    invoice_id: activeInvoice.id,
-                    channel: 'gcash',
-                },
-            );
-            setDemoIntent({
-                id: result.data.id,
-                status: result.data.attributes.status,
-                checkoutUrl:
-                    result.data.attributes?.next_action?.redirect?.checkout_url,
-            });
-            setDemoOpen(true);
-            setConfirmOpen(false);
-        } catch (error) {
-            window.alert('Unable to create demo payment intent.');
-            console.error(error);
-        } finally {
-            setDemoLoading(false);
-        }
-    };
-    const refreshDemoIntent = async () => {
-        if (!demoIntent) {
-            return;
-        }
-        setDemoLoading(true);
-        try {
-            const result = await callDemoApi(
-                `/tenant/paymongo/demo/payment-intents/${demoIntent.id}`,
-                'GET',
-            );
-            setDemoIntent((current) =>
-                current
-                    ? {
-                          ...current,
-                          status: result.data.attributes.status,
-                      }
-                    : current,
-            );
-        } catch (error) {
-            window.alert('Unable to refresh demo payment status.');
-            console.error(error);
-        } finally {
-            setDemoLoading(false);
-        }
-    };
-    const confirmDemoIntent = async () => {
-        if (!demoIntent || !activeInvoice) {
-            return;
-        }
-        setDemoLoading(true);
-        try {
-            const result = await callDemoApi(
-                `/tenant/paymongo/demo/payment-intents/${demoIntent.id}/confirm`,
-                'POST',
-            );
-            setDemoIntent((current) =>
-                current
-                    ? {
-                          ...current,
-                          status: result.data.attributes.status,
-                      }
-                    : current,
-            );
-            router.post('/tenant/pay-rent', {
-                invoice_id: activeInvoice.id,
-                method: 'GCash',
-                reference: refNo.trim(),
-            }, {
-                onError: (errors) => {
-                    const message =
-                        errors?.invoice_id ??
-                        errors?.method ??
-                        'Unable to submit payment.';
-                    window.alert(message);
-                },
-            });
-        } catch (error) {
-            window.alert('Unable to confirm demo payment.');
-            console.error(error);
-        } finally {
-            setDemoLoading(false);
-        }
-    };
+    const [submitting, setSubmitting] = useState(false);
+
     const activeInvoice = unpaidInvoices?.[0]
         ? {
               id: unpaidInvoices[0].id,
@@ -147,17 +44,46 @@ export default function PayRentPage() {
               penalty: unpaidInvoices[0].penalty,
               total: unpaidInvoices[0].total,
               dueDate: unpaidInvoices[0].due_date,
+              status: unpaidInvoices[0].status,
           }
         : null;
+
     const selected = METHODS.find((m) => m.id === method);
-    const handleConfirm = () => {
-        if (!refNo.trim()) {
+    const isGcash = method === 'gcash';
+
+    const handlePay = () => {
+        if (isGcash && !refNo.trim()) {
             window.alert('Reference number is required for GCash payments.');
             return;
         }
 
-        void createDemoIntent();
+        setSubmitting(true);
+
+        const payload = {
+            invoice_id: activeInvoice.id,
+            method: isGcash ? 'GCash' : 'Cash',
+        };
+        if (isGcash) {
+            payload.reference = refNo.trim();
+        }
+
+        router.post('/tenant/pay-rent', payload, {
+            onSuccess: () => {
+                setSubmitting(false);
+                setSuccessOpen(true);
+            },
+            onError: (errors) => {
+                setSubmitting(false);
+                const message =
+                    errors?.invoice_id ??
+                    errors?.method ??
+                    errors?.reference ??
+                    'Unable to submit payment.';
+                window.alert(message);
+            },
+        });
     };
+
     if ((unpaidInvoices?.length ?? 0) === 0) {
         return (
             <Card>
@@ -174,8 +100,9 @@ export default function PayRentPage() {
             </Card>
         );
     }
+
     return (
-        <div className="max-w-3xl space-y-5">
+        <div className="space-y-5">
             {/* ── Invoice summary ── */}
             <Card>
                 <Card.Header
@@ -241,221 +168,148 @@ export default function PayRentPage() {
                 </Card.Body>
             </Card>
 
-            {/* ── Payment method ── */}
-            <Card>
-                <Card.Header title="Select Payment Method" />
-                <Card.Body>
-                    <div className="mb-5 space-y-3">
-                        {METHODS.map((m) => (
-                            <button
-                                key={m.id}
-                                onClick={() => setMethod(m.id)}
-                                className={[
-                                    'flex w-full items-center gap-4 rounded-xl border-2 px-4 py-4 text-left transition-all',
-                                    method === m.id
-                                        ? 'border-[#24A18F] bg-[#24A18F]/5'
-                                        : 'border-[#1B2B4B]/12 hover:border-[#1B2B4B]/25 hover:bg-[#FAF8F4]',
-                                ].join(' ')}
-                            >
-                                {/* Radio */}
-                                <div
-                                    className={[
-                                        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all',
-                                        method === m.id
-                                            ? 'border-[#24A18F]'
-                                            : 'border-[#1B2B4B]/25',
-                                    ].join(' ')}
+            {/* ── Pending confirmation / Payment method ── */}
+            {activeInvoice.status === 'pending' ? (
+                <Card>
+                    <Card.Body>
+                        <div className="py-6 text-center">
+                            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50">
+                                <svg
+                                    className="h-7 w-7 animate-spin text-amber-500"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
                                 >
-                                    {method === m.id && (
-                                        <div className="h-2.5 w-2.5 rounded-full bg-[#24A18F]" />
-                                    )}
-                                </div>
-
-                                {/* Icon placeholder */}
-                                <div
-                                    className={[
-                                        'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold',
-                                        m.id === 'gcash'
-                                            ? 'bg-blue-50 text-blue-600'
-                                            : m.id === 'bank'
-                                              ? 'bg-[#1B2B4B]/8 text-[#1B2B4B]'
-                                              : 'bg-[#C8963E]/10 text-[#C8963E]',
-                                    ].join(' ')}
-                                >
-                                    {m.id === 'gcash'
-                                        ? 'G'
-                                        : m.id === 'bank'
-                                          ? 'B'
-                                          : '₱'}
-                                </div>
-
-                                <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-semibold text-[#1B2B4B]">
-                                        {m.label}
-                                    </p>
-                                    <p className="text-xs text-[#5C6B88]">
-                                        {m.sub}
-                                    </p>
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-
-                    {/* Selected method instructions */}
-                    <div className="mb-5 rounded-xl bg-[#F5F0E8] p-4">
-                        <p className="mb-1 text-[10px] font-bold tracking-wider text-[#5C6B88] uppercase">
-                            {selected.label} Details
-                        </p>
-                        <p className="text-sm font-medium text-[#1B2B4B]">
-                            {selected.detail}
-                        </p>
-                    </div>
-
-                    <Input
-                        label="Reference / Transaction Number"
-                        placeholder="e.g. 1234567890"
-                        value={refNo}
-                        onChange={(e) => setRefNo(e.target.value)}
-                        helper="Enter your GCash reference number."
-                        full
-                    />
-                </Card.Body>
-                <Card.Footer>
-                    <div className="flex w-full items-center justify-between">
-                        <div>
-                            <span className="text-xs text-[#5C6B88]">
-                                You are paying{' '}
-                            </span>
-                            <span className="text-sm font-bold text-[#1B2B4B]">
-                                ₱{activeInvoice.total.toLocaleString()}
-                            </span>
-                            <span className="text-xs text-[#5C6B88]">
-                                {' '}
-                                via {selected.label}
-                            </span>
+                                    <circle
+                                        className="opacity-25"
+                                        cx="12"
+                                        cy="12"
+                                        r="10"
+                                        stroke="currentColor"
+                                        strokeWidth="4"
+                                    />
+                                    <path
+                                        className="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                                    />
+                                </svg>
+                            </div>
+                            <h3 className="mb-1 text-lg font-bold text-[#1B2B4B]">
+                                Waiting for Confirmation
+                            </h3>
+                            <p className="mx-auto max-w-sm text-sm text-[#5C6B88]">
+                                Your payment for Invoice{' '}
+                                {activeInvoice.invoiceNo} has been submitted and
+                                is awaiting admin confirmation. You will be
+                                notified once confirmed.
+                            </p>
                         </div>
-                        <Button
-                            variant="primary"
-                            size="md"
-                            onClick={() => setConfirmOpen(true)}
-                            disabled={refNo.trim() === ''}
-                        >
-                            Start GCash Demo Checkout
-                        </Button>
-                    </div>
-                </Card.Footer>
-            </Card>
+                    </Card.Body>
+                </Card>
+            ) : (
+                <>
+                    {/* ── Payment method ── */}
+                    <Card>
+                        <Card.Header title="Select Payment Method" />
+                        <Card.Body>
+                            <div className="mb-5 space-y-3">
+                                {METHODS.map((m) => (
+                                    <button
+                                        key={m.id}
+                                        onClick={() => setMethod(m.id)}
+                                        className={[
+                                            'flex w-full items-center gap-4 rounded-xl border-2 px-4 py-4 text-left transition-all',
+                                            method === m.id
+                                                ? 'border-[#24A18F] bg-[#24A18F]/5'
+                                                : 'border-[#1B2B4B]/12 hover:border-[#1B2B4B]/25 hover:bg-[#FAF8F4]',
+                                        ].join(' ')}
+                                    >
+                                        <div
+                                            className={[
+                                                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-all',
+                                                method === m.id
+                                                    ? 'border-[#24A18F]'
+                                                    : 'border-[#1B2B4B]/25',
+                                            ].join(' ')}
+                                        >
+                                            {method === m.id && (
+                                                <div className="h-2.5 w-2.5 rounded-full bg-[#24A18F]" />
+                                            )}
+                                        </div>
 
-            {/* ── Confirm Modal ── */}
-            <Modal
-                open={confirmOpen}
-                onClose={() => setConfirmOpen(false)}
-                title="Confirm Payment"
-                size="sm"
-                footer={
-                    <>
-                        <Button
-                            variant="ghost"
-                            onClick={() => setConfirmOpen(false)}
-                        >
-                            Cancel
-                        </Button>
-                        <Button variant="primary" onClick={handleConfirm}>
-                            Yes, Confirm
-                        </Button>
-                    </>
-                }
-            >
-                <div className="py-2 text-center">
-                    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#24A18F]/10">
-                        <span className="text-2xl">₱</span>
-                    </div>
-                    <p className="mb-1 text-3xl font-bold text-[#1B2B4B]">
-                        ₱{activeInvoice.total.toLocaleString()}
-                    </p>
-                    <p className="mb-5 text-sm text-[#5C6B88]">
-                        {activeInvoice.period} · via {selected.label}
-                    </p>
-                </div>
-                <InfoRow label="Tenant" value={auth?.user?.name ?? 'Tenant'} />
-                <InfoRow label="Unit" value="-" />
-                <InfoRow label="Invoice" value={activeInvoice.invoiceNo} />
-                <InfoRow label="Method" value={selected.label} border={false} />
-                {refNo && (
-                    <InfoRow label="Reference" value={refNo} border={false} />
-                )}
-            </Modal>
+                                        <div
+                                            className={[
+                                                'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold',
+                                                m.iconClass,
+                                            ].join(' ')}
+                                        >
+                                            {m.icon}
+                                        </div>
 
-            {/* ── PayMongo Demo Modal ── */}
-            <Modal
-                open={demoOpen}
-                onClose={() => setDemoOpen(false)}
-                title="PayMongo Demo Checkout"
-                size="sm"
-                footer={
-                    <>
-                        <Button
-                            variant="ghost"
-                            onClick={() => setDemoOpen(false)}
-                        >
-                            Close
-                        </Button>
-                        <Button
-                            variant="outline"
-                            onClick={() => void refreshDemoIntent()}
-                            disabled={demoLoading || !demoIntent}
-                        >
-                            Refresh Status
-                        </Button>
-                        <Button
-                            variant="primary"
-                            onClick={() => void confirmDemoIntent()}
-                            disabled={demoLoading || !demoIntent}
-                        >
-                            Simulate GCash Success
-                        </Button>
-                    </>
-                }
-            >
-                <div className="space-y-2">
-                    <InfoRow
-                        label="Invoice"
-                        value={activeInvoice?.invoiceNo ?? '-'}
-                    />
-                    <InfoRow
-                        label="Amount"
-                        value={`₱${activeInvoice?.total?.toLocaleString() ?? '0'}`}
-                    />
-                    <InfoRow
-                        label="Intent ID"
-                        value={
-                            <span className="font-mono text-xs">
-                                {demoIntent?.id ?? '-'}
-                            </span>
-                        }
-                    />
-                    <InfoRow
-                        label="Status"
-                        value={
-                            <Badge variant="blue">
-                                {demoIntent?.status ?? '-'}
-                            </Badge>
-                        }
-                        border={false}
-                    />
-                </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-semibold text-[#1B2B4B]">
+                                                {m.label}
+                                            </p>
+                                            <p className="text-xs text-[#5C6B88]">
+                                                {m.sub}
+                                            </p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
 
-                {demoIntent?.checkoutUrl && (
-                    <div className="mt-4 rounded-xl border border-[#1B2B4B]/12 bg-[#F7FAFF] p-3">
-                        <p className="text-xs text-[#5C6B88]">
-                            Demo checkout URL
-                        </p>
-                        <p className="mt-1 font-mono text-xs break-all text-[#1B2B4B]">
-                            {demoIntent.checkoutUrl}
-                        </p>
-                    </div>
-                )}
-            </Modal>
+                            <div className="mb-5 rounded-xl bg-[#F5F0E8] p-4">
+                                <p className="mb-1 text-[10px] font-bold tracking-wider text-[#5C6B88] uppercase">
+                                    {selected.label} Details
+                                </p>
+                                <p className="text-sm font-medium text-[#1B2B4B]">
+                                    {selected.detail}
+                                </p>
+                            </div>
+
+                            {isGcash && (
+                                <Input
+                                    label="Reference / Transaction Number"
+                                    placeholder="e.g. 1234567890"
+                                    value={refNo}
+                                    onChange={(e) => setRefNo(e.target.value)}
+                                    helper="Enter your GCash reference number."
+                                    full
+                                />
+                            )}
+                        </Card.Body>
+                        <Card.Footer>
+                            <div className="flex w-full items-center justify-between">
+                                <div>
+                                    <span className="text-xs text-[#5C6B88]">
+                                        You are paying{' '}
+                                    </span>
+                                    <span className="text-sm font-bold text-[#1B2B4B]">
+                                        ₱{activeInvoice.total.toLocaleString()}
+                                    </span>
+                                    <span className="text-xs text-[#5C6B88]">
+                                        {' '}
+                                        via {selected.label}
+                                    </span>
+                                </div>
+                                <Button
+                                    variant="primary"
+                                    size="md"
+                                    onClick={handlePay}
+                                    disabled={
+                                        (isGcash && refNo.trim() === '') ||
+                                        submitting
+                                    }
+                                >
+                                    {submitting
+                                        ? 'Processing...'
+                                        : `Pay ${selected.label}`}
+                                </Button>
+                            </div>
+                        </Card.Footer>
+                    </Card>
+                </>
+            )}
 
             {/* ── Success Modal ── */}
             <Modal
@@ -469,11 +323,12 @@ export default function PayRentPage() {
                         <span className="text-3xl text-[#24A18F]">✓</span>
                     </div>
                     <h3 className="mb-1 text-lg font-bold text-[#1B2B4B]">
-                        Payment Submitted!
+                        Payment Submitted
                     </h3>
                     <p className="mb-5 text-sm text-[#5C6B88]">
-                        Your payment notification has been sent to the admin for
-                        confirmation. You will receive a receipt once verified.
+                        {isGcash
+                            ? 'Your GCash payment has been recorded. The admin will confirm it shortly.'
+                            : 'You chose to pay with cash. The admin has been notified.'}
                     </p>
                     <div className="mb-5 rounded-xl bg-[#F5F0E8] p-4 text-left">
                         <InfoRow
@@ -481,6 +336,7 @@ export default function PayRentPage() {
                             value={`₱${activeInvoice.total.toLocaleString()}`}
                         />
                         <InfoRow label="Method" value={selected.label} />
+                        {isGcash && <InfoRow label="Reference" value={refNo} />}
                         <InfoRow
                             label="Invoice"
                             value={activeInvoice.invoiceNo}
@@ -491,7 +347,12 @@ export default function PayRentPage() {
                         variant="primary"
                         size="md"
                         full
-                        onClick={() => setSuccessOpen(false)}
+                        onClick={() => {
+                            setSuccessOpen(false);
+                            router.visit('/tenant/pay-rent', {
+                                preserveState: false,
+                            });
+                        }}
                     >
                         Done
                     </Button>

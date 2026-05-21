@@ -4,6 +4,7 @@ import Avatar from '../../components/Avatar';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
+import ConfirmModal from '../../components/ConfirmModal';
 import InfoRow from '../../components/InfoRow';
 import { Input, Select, Textarea } from '../../components/Input';
 import Modal from '../../components/Modal';
@@ -35,9 +36,10 @@ const statusBadge = (s) => {
 
 const leaseStatusBadge = (status) => {
     if (status === 'active') return <Badge variant="green">Active</Badge>;
-    if (status === 'ended') return <Badge variant="gray">Ended</Badge>;
+    if (status === 'terminated') return <Badge variant="red">Terminated</Badge>;
     if (status === 'expired') return <Badge variant="red">Expired</Badge>;
     if (status === 'pending') return <Badge variant="amber">Pending</Badge>;
+    if (status === 'renewed') return <Badge variant="blue">Renewed</Badge>;
     return <Badge variant="gray">{status ?? 'Unknown'}</Badge>;
 };
 
@@ -102,6 +104,22 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         (unit) => unit.status === 'vacant' && unit.tenant_id === null,
     );
     const defaultUnit = availableUnits[0];
+    const [isSaving, setIsSaving] = useState(false);
+    const [addErrors, setAddErrors] = useState({});
+    const [editErrors, setEditErrors] = useState({});
+    const createDefaultAddForm = () => ({
+        name: '',
+        contact: '',
+        phone: '',
+        email: '',
+        unit_id: defaultUnit?.id ?? '',
+        occupation: '',
+        monthlyIncome: '',
+        emergencyContact: '',
+        moveInDate: '',
+        leaseDuration: '6',
+        notes: '',
+    });
     const [tenants, setTenants] = useState(mappedTenants);
     const [archivedTenants, setArchivedTenants] = useState(
         mappedArchivedTenants,
@@ -114,24 +132,13 @@ export default function TenantsPage({ openAddSignal = 0 }) {
     const [detailOpen, setDetailOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [renewOpen, setRenewOpen] = useState(false);
-    const [addForm, setAddForm] = useState({
-        name: '',
-        contact: '',
-        phone: '',
-        email: '',
-        unit_id: defaultUnit?.id ?? '',
-        paymentMethod: 'GCash',
-        leaseStart: '',
-        leaseEnd: '',
-        notes: '',
-    });
+    const [addForm, setAddForm] = useState(createDefaultAddForm());
     const [editForm, setEditForm] = useState({});
     const [renewForm, setRenewForm] = useState({
         leaseStart: '',
         leaseEnd: '',
         rent: '',
         deposit: '',
-        paymentMethod: 'GCash',
         terms: '',
     });
     const [renewErrors, setRenewErrors] = useState({});
@@ -143,6 +150,14 @@ export default function TenantsPage({ openAddSignal = 0 }) {
         balanceDue: '0',
     });
     const [moveOutErrors, setMoveOutErrors] = useState({});
+    const [confirmAction, setConfirmAction] = useState(null);
+    const [detailTab, setDetailTab] = useState('Overview');
+
+    useEffect(() => {
+        if (detailOpen) {
+            setDetailTab('Overview');
+        }
+    }, [detailOpen]);
     const lastHandledSignal = useRef(openAddSignal);
     const credentials = flash?.tenant_credentials ?? null;
     const currentCredentialKey = credentials
@@ -245,16 +260,25 @@ export default function TenantsPage({ openAddSignal = 0 }) {
           )
         : [];
     const restoreTenant = (tenantId) => {
-        if (!window.confirm('Restore this tenant?')) {
-            return;
-        }
-        router.post(`/admin/tenants/${tenantId}/restore`);
+        setConfirmAction({ type: 'restore', tenantId });
+    };
+    const confirmRestore = () => {
+        if (!confirmAction) return;
+        setConfirmAction(null);
+        router.post(`/admin/tenants/${confirmAction.tenantId}/restore`);
     };
     const archiveTenant = (tenantId) => {
-        if (!window.confirm('Archive this tenant?')) {
-            return;
-        }
-        router.delete(`/admin/tenants/${tenantId}`);
+        setConfirmAction({ type: 'archive', tenantId, name: selected?.name });
+    };
+    const confirmArchive = () => {
+        if (!confirmAction) return;
+        setConfirmAction(null);
+        router.delete(`/admin/tenants/${confirmAction.tenantId}`, {
+            onSuccess: () => {
+                setDetailOpen(false);
+                setSelected(null);
+            },
+        });
     };
     const columns = [
         {
@@ -331,20 +355,20 @@ export default function TenantsPage({ openAddSignal = 0 }) {
     ];
     const active = tenants.filter((t) => t.status === 'active').length;
     const pendingPayment = tenants.filter((t) => t.status === 'pending_payment').length;
+    const scrollToFirstError = (errors) => {
+        if (!errors) return;
+        const keys = Object.keys(errors);
+        if (keys.length === 0) return;
+        const firstKey = keys[0];
+        const el = document.getElementById(firstKey);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus({ preventScroll: true });
+        }
+    };
     const saveTenant = () => {
-        if (
-            !addForm.name ||
-            !addForm.contact ||
-            !addForm.email ||
-            !addForm.unit_id ||
-            !addForm.leaseStart ||
-            !addForm.leaseEnd
-        ) {
-            return;
-        }
-        if (!window.confirm('Add this tenant profile?')) {
-            return;
-        }
+        setAddErrors({});
+        setIsSaving(true);
         const initials =
             addForm.name
                 .split(' ')
@@ -360,10 +384,24 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             phone: addForm.phone || 'N/A',
             email: addForm.email,
             unit_id: Number(addForm.unit_id),
-            lease_start: addForm.leaseStart,
-            lease_end: addForm.leaseEnd,
-            payment_method: addForm.paymentMethod,
+            lease_start: addForm.moveInDate,
+            occupation: addForm.occupation,
+            monthly_income: addForm.monthlyIncome ? Number(addForm.monthlyIncome) : undefined,
+            emergency_contact: addForm.emergencyContact,
+            lease_duration: Number(addForm.leaseDuration),
             status: 'active',
+        }, {
+            onSuccess: () => {
+                setIsSaving(false);
+                setAddOpen(false);
+                setAddForm(createDefaultAddForm());
+                setAddErrors({});
+            },
+            onError: (errors) => {
+                setIsSaving(false);
+                setAddErrors(errors || {});
+                scrollToFirstError(errors);
+            },
         });
     };
     const startEdit = () => {
@@ -376,9 +414,13 @@ export default function TenantsPage({ openAddSignal = 0 }) {
     };
     const saveEdit = () => {
         if (!selected) return;
-        if (!window.confirm('Save changes to this tenant?')) {
-            return;
-        }
+        setConfirmAction({ type: 'edit' });
+    };
+
+    const confirmEdit = () => {
+        if (!selected) return;
+        setConfirmAction(null);
+        setEditErrors({});
         router.patch(`/admin/tenants/${selected.id}`, {
             contact: editForm.contact,
             phone: editForm.phone,
@@ -386,6 +428,16 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             unit_id: editForm.unit_id ? Number(editForm.unit_id) : undefined,
             payment_method: editForm.paymentMethod,
             status: editForm.status,
+        }, {
+            onSuccess: () => {
+                setEditOpen(false);
+                setDetailOpen(false);
+                setSelected(null);
+            },
+            onError: (errors) => {
+                setEditErrors(errors || {});
+                scrollToFirstError(errors);
+            },
         });
     };
     const closeMoveOut = () => {
@@ -406,8 +458,6 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             leaseEnd: '',
             rent: String(latestLease?.rent ?? selected.rent ?? ''),
             deposit: String(latestLease?.deposit ?? selected.deposit ?? ''),
-            paymentMethod:
-                latestLease?.paymentMethod ?? selected.paymentMethod ?? 'GCash',
             terms: String(latestLease?.terms ?? ''),
         });
         setRenewOpen(true);
@@ -415,21 +465,12 @@ export default function TenantsPage({ openAddSignal = 0 }) {
 
     const saveMoveOut = () => {
         if (!selected) return;
+        setConfirmAction({ type: 'moveOut', name: selected.name });
+    };
 
-        const nextErrors = {};
-        if (!moveOutForm.reason.trim()) {
-            nextErrors.reason = 'Reason is required.';
-        }
-
-        if (Object.keys(nextErrors).length > 0) {
-            setMoveOutErrors(nextErrors);
-            return;
-        }
-
-        if (!window.confirm(`Confirm move-out for ${selected.name}? This will end all leases and free all units.`)) {
-            return;
-        }
-
+    const confirmMoveOut = () => {
+        if (!selected) return;
+        setConfirmAction(null);
         setMoveOutErrors({});
 
         router.post(`/admin/tenants/${selected.id}/move-out`, {
@@ -446,6 +487,7 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     balanceDue: errors.balance_due,
                     general: Object.values(errors).join(', '),
                 });
+                scrollToFirstError(errors);
             },
             onSuccess: () => {
                 setMoveOutOpen(false);
@@ -456,57 +498,12 @@ export default function TenantsPage({ openAddSignal = 0 }) {
 
     const saveRenew = () => {
         if (!selected) return;
+        setConfirmAction({ type: 'renew' });
+    };
 
-        const nextErrors = {};
-
-        if (!renewForm.leaseStart) {
-            nextErrors.leaseStart = 'Lease start date is required.';
-        }
-        if (!renewForm.leaseEnd) {
-            nextErrors.leaseEnd = 'Lease end date is required.';
-        }
-        if (!renewForm.rent) {
-            nextErrors.rent = 'Monthly rent is required.';
-        } else if (Number(renewForm.rent) <= 0) {
-            nextErrors.rent = 'Monthly rent must be greater than 0.';
-        }
-        if (!renewForm.deposit) {
-            nextErrors.deposit = 'Security deposit is required.';
-        } else if (Number(renewForm.deposit) < 0) {
-            nextErrors.deposit = 'Security deposit cannot be negative.';
-        }
-
-        const latestLeaseEnd = toDateInputValue(
-            selectedLeases[0]?.endDate ?? selected.leaseEnd,
-        );
-
-        if (
-            latestLeaseEnd &&
-            renewForm.leaseStart &&
-            renewForm.leaseStart <= latestLeaseEnd
-        ) {
-            nextErrors.leaseStart =
-                'Renewal start date must be after the current lease end date.';
-        }
-
-        if (
-            renewForm.leaseStart &&
-            renewForm.leaseEnd &&
-            renewForm.leaseEnd < renewForm.leaseStart
-        ) {
-            nextErrors.leaseEnd =
-                'Lease end date must be on or after lease start date.';
-        }
-
-        if (Object.keys(nextErrors).length > 0) {
-            setRenewErrors(nextErrors);
-            return;
-        }
-
-        if (!window.confirm('Create a new lease term for this tenant?')) {
-            return;
-        }
-
+    const confirmRenew = () => {
+        if (!selected) return;
+        setConfirmAction(null);
         setRenewErrors({});
 
         router.post(`/admin/tenants/${selected.id}/renew`, {
@@ -514,21 +511,25 @@ export default function TenantsPage({ openAddSignal = 0 }) {
             lease_end: renewForm.leaseEnd,
             rent: Number(renewForm.rent || 0),
             deposit: Number(renewForm.deposit || 0),
-            payment_method: renewForm.paymentMethod,
             terms: renewForm.terms || null,
         }, {
-            onError: (errors) => {
-                setRenewErrors({
-                    leaseStart: errors.lease_start,
-                    leaseEnd: errors.lease_end,
-                    rent: errors.rent,
-                    deposit: errors.deposit,
-                    paymentMethod: errors.payment_method,
-                    terms: errors.terms,
-                    general: errors.unit,
-                });
-            },
-        });
+                onError: (errors) => {
+                    setRenewErrors({
+                        leaseStart: errors.lease_start,
+                        leaseEnd: errors.lease_end,
+                        rent: errors.rent,
+                        deposit: errors.deposit,
+                        terms: errors.terms,
+                        general: errors.unit,
+                    });
+                    scrollToFirstError(errors);
+                },
+                onSuccess: () => {
+                    setRenewOpen(false);
+                    setDetailOpen(false);
+                    setSelected(null);
+                },
+            });
     };
     return (
         <div className="space-y-5">
@@ -548,7 +549,7 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                 ].map((s) => (
                     <div
                         key={s.label}
-                        className="flex items-center gap-3 rounded-xl border border-[#1B2B4B]/10 bg-white px-5 py-3 shadow-sm"
+                        className="flex items-center gap-3 rounded-xl border border-[#1B2B4B]/10 bg-white px-5 py-3 shadow-sm transition-colors hover:bg-gray-50"
                     >
                         <span className={`text-2xl font-bold ${s.color}`}>
                             {s.count}
@@ -639,176 +640,262 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                     open={detailOpen}
                     onClose={() => setDetailOpen(false)}
                     title="Tenant Profile"
-                    size="lg"
+                    size="2xl"
                     footer={
-                        <>
-                            <Button
-                                variant="ghost"
-                                onClick={() => setDetailOpen(false)}
-                            >
-                                Close
-                            </Button>
-                            <Button variant="secondary" onClick={openRenew}>
-                                Renew Lease
-                            </Button>
-                            <Button variant="primary" onClick={startEdit}>
-                                Edit Tenant
-                            </Button>
-                            <Button
-                                variant="danger"
-                                onClick={() => setMoveOutOpen(true)}
-                            >
-                                Move Out
-                            </Button>
-                            <Button
-                                variant="danger"
-                                onClick={() => archiveTenant(selected.id)}
-                            >
-                                Archive Tenant
-                            </Button>
-                        </>
+                        <div className="flex w-full items-center justify-between gap-2">
+
+                            <div className='flex gap-3'>
+                                <Button
+                                    variant="danger"
+                                    onClick={() => setMoveOutOpen(true)}
+                                >
+                                    Move Out
+                                </Button>
+                                
+                                <Button
+                                    variant="danger"
+                                    onClick={() => archiveTenant(selected.id)}
+                                >
+                                    Archive
+                                </Button>
+                            </div>
+
+                            <div className='flex gap-3'>
+                                <Button variant="primary" onClick={startEdit}>
+                                    Edit Tenant
+                                </Button>
+                                <Button variant="secondary" onClick={openRenew}>
+                                    Renew Lease
+                                </Button>
+
+                            </div>
+ 
+                        </div>
                     }
                 >
-                    <div className="mb-5 flex items-center gap-4 border-b border-[#1B2B4B]/8 pb-5">
-                        <Avatar
-                            initials={selected.initials}
-                            name={selected.name}
-                            size="lg"
-                        />
-                        <div className="flex-1">
-                            <h3 className="text-base font-semibold text-[#1B2B4B]">
-                                {selected.name}
-                            </h3>
-                            <p className="text-sm text-[#5C6B88]">
-                                {selected.units && selected.units.length > 0
-                                    ? selected.units.map((u) => `Unit ${u.number} (${u.floor} - ${u.type})`).join(', ')
-                                    : `Unit ${selected.unit} · ${selected.floor} · ${selected.type}`}
-                            </p>
-                        </div>
-                        {statusBadge(selected.status)}
-                    </div>
-                    {selected.units && selected.units.length > 1 && (
-                        <div className="mb-4 rounded-xl border border-[#1B2B4B]/12 bg-[#F7FAFF] px-4 py-3">
-                            <p className="text-xs font-semibold tracking-wider text-[#5C6B88] uppercase">
-                                Occupied Units ({selected.units.length})
-                            </p>
-                            <div className="mt-2 space-y-1">
-                                {selected.units.map((u) => (
-                                    <p key={u.id} className="text-sm text-[#1B2B4B]">
-                                        Unit {u.number} · {u.floor} · {u.type} · P{Number(u.baseRent).toLocaleString()}/mo · {u.status}
+                    <div className="space-y-6">
+                        {/* ── Sticky Header ── */}
+                        <div className="">
+                            <div className="flex items-center gap-4">
+                                <Avatar
+                                    initials={selected.initials}
+                                    name={selected.name}
+                                    size="lg"
+                                />
+                                <div className="flex-1 min-w-0">
+                                    <h2 className="text-lg font-bold text-[#1B2B4B]">
+                                        {selected.name}
+                                    </h2>
+                                    <p className="text-sm text-[#5C6B88]">
+                                        {selected.units && selected.units.length > 0
+                                            ? selected.units.map((u) => `Unit ${u.number} (${u.floor} - ${u.type})`).join(', ')
+                                            : `Unit ${selected.unit} · ${selected.floor} · ${selected.type}`}
                                     </p>
-                                ))}
+                                </div>
+                                {statusBadge(selected.status)}
                             </div>
                         </div>
-                    )}
 
-                    <div className="grid grid-cols-2 gap-6">
-                        <div>
-                            <p className="mb-2 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
-                                Lease Details
-                            </p>
-                            <InfoRow label="Contact" value={selected.contact} />
-                            <InfoRow
-                                label="Occupied Units"
-                                value={selected.units && selected.units.length > 0
-                                    ? selected.units.map((u) => `Unit ${u.number} (${u.floor} - ${u.type})`).join(', ')
-                                    : selected.unit || 'N/A'}
-                            />
-                            <InfoRow label="Phone" value={selected.phone} />
-                            <InfoRow label="Email" value={selected.email} />
-                            <InfoRow
-                                label="Lease Start"
-                                value={formatDateDisplay(selected.leaseStart)}
-                            />
-                            <InfoRow
-                                label="Lease End"
-                                value={formatDateDisplay(selected.leaseEnd)}
-                            />
-                            <InfoRow
-                                label="Monthly Rent"
-                                value={
-                                    <span className="font-bold">
-                                        P{selected.rent.toLocaleString()}
-                                    </span>
-                                }
-                            />
-                            <InfoRow
-                                label="Security Deposit"
-                                value={`P${selected.deposit.toLocaleString()}`}
-                            />
-                            <InfoRow
-                                label="Payment Method"
-                                value={methodBadge(selected.paymentMethod)}
-                                border={false}
-                            />
+                        {/* ── Tabs ── */}
+                        <div className="flex gap-1 border-b border-[#1B2B4B]/8 pb-px">
+                            {['Overview', 'Payments', 'Lease Records', 'Maintenance'].map((tab) => (
+                                <button
+                                    key={tab}
+                                    onClick={() => setDetailTab(tab)}
+                                    className={[
+                                        'rounded-t-lg px-4 py-2 text-xs font-semibold transition-all',
+                                        detailTab === tab
+                                            ? 'bg-[#1B2B4B]/5 text-[#1B2B4B]'
+                                            : 'text-[#5C6B88] hover:text-[#1B2B4B]',
+                                    ].join(' ')}
+                                >
+                                    {tab}
+                                </button>
+                            ))}
                         </div>
 
-                        <div>
-                            <p className="mb-2 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
-                                Payment History
-                            </p>
-                            {tenantInvoices.length === 0 ? (
-                                <p className="text-sm text-[#5C6B88]">
-                                    No invoices found.
-                                </p>
-                            ) : (
-                                tenantInvoices.map((inv) => (
-                                    <div
-                                        key={inv.id}
-                                        className="flex items-center justify-between border-b border-[#1B2B4B]/5 py-2.5 last:border-0"
-                                    >
-                                        <div>
-                                            <p className="text-sm font-medium text-[#1B2B4B]">
-                                                {inv.period}
-                                            </p>
-                                            <p className="text-xs text-[#5C6B88]">
-                                                {inv.invoiceNo}
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-semibold">
-                                                P{inv.total.toLocaleString()}
-                                            </span>
-                                            {statusBadge(inv.status)}
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-
-                            <p className="mt-5 mb-2 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
-                                Lease History
-                            </p>
-                            {selectedLeases.length === 0 ? (
-                                <p className="text-sm text-[#5C6B88]">
-                                    No lease records found.
-                                </p>
-                            ) : (
-                                selectedLeases.map((lease) => (
-                                    <div
-                                        key={lease.id}
-                                        className="border-b border-[#1B2B4B]/5 py-2.5 last:border-0"
-                                    >
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-medium text-[#1B2B4B]">
-                                                {formatDateDisplay(
-                                                    lease.startDate,
-                                                )}{' '}
-                                                -{' '}
-                                                {formatDateDisplay(lease.endDate)}
-                                            </p>
-                                            {leaseStatusBadge(lease.status)}
-                                        </div>
-                                        <p className="mt-1 text-xs text-[#5C6B88]">
-                                            Rent: P
-                                            {Number(lease.rent).toLocaleString()}{' '}
-                                            · Deposit: P
-                                            {Number(lease.deposit).toLocaleString()}{' '}
-                                            · {lease.paymentMethod}
+                        {/* ── Overview Tab ── */}
+                        {detailTab === 'Overview' && (
+                            <div className="space-y-5">
+                                <div className="grid gap-5 md:grid-cols-2">
+                                    {/* A. Personal Information */}
+                                    <div className="rounded-xl border border-[#1B2B4B]/10 bg-white p-5 shadow-sm">
+                                        <p className="mb-4 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
+                                            Personal Information
                                         </p>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Contact</p>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">{selected.contact}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Phone</p>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">{selected.phone}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Email</p>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">{selected.email}</p>
+                                            </div>
+                                        </div>
                                     </div>
-                                ))
-                            )}
-                        </div>
+
+                                    {/* B. Lease Information */}
+                                    <div className="rounded-xl border border-[#1B2B4B]/10 bg-white p-5 shadow-sm">
+                                        <p className="mb-4 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
+                                            Lease Information
+                                        </p>
+                                        <div className="space-y-3">
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Occupied Unit</p>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">
+                                                    {selected.units && selected.units.length > 0
+                                                        ? selected.units.map((u) => `Unit ${u.number} (${u.floor} - ${u.type})`).join(', ')
+                                                        : `Unit ${selected.unit} · ${selected.floor} · ${selected.type}`}
+                                                </p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Lease Start</p>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">{formatDateDisplay(selected.leaseStart)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Lease End</p>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">{formatDateDisplay(selected.leaseEnd)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Monthly Rent</p>
+                                                <p className="text-sm font-bold text-[#1B2B4B]">P{selected.rent.toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Security Deposit</p>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">P{selected.deposit.toLocaleString()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-[#5C6B88]">Payment Method</p>
+                                                <div className="mt-1">{methodBadge(selected.paymentMethod)}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* C. Payment History */}
+                                    <div className="rounded-xl border border-[#1B2B4B]/10 bg-white p-5 shadow-sm">
+                                        <p className="mb-4 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
+                                            Payment History
+                                        </p>
+                                        {tenantInvoices.length === 0 ? (
+                                            <p className="text-sm text-[#5C6B88]">No invoices found.</p>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {tenantInvoices.map((inv) => (
+                                                    <div key={inv.id} className="flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-sm font-medium text-[#1B2B4B]">{inv.period}</p>
+                                                            <p className="text-xs text-[#5C6B88]">{inv.invoiceNo}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-semibold">P{inv.total.toLocaleString()}</span>
+                                                            {statusBadge(inv.status)}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* D. Lease History */}
+                                    <div className="rounded-xl border border-[#1B2B4B]/10 bg-white p-5 shadow-sm">
+                                        <p className="mb-4 text-[11px] font-bold tracking-wider text-[#5C6B88] uppercase">
+                                            Lease History
+                                        </p>
+                                        {selectedLeases.length === 0 ? (
+                                            <p className="text-sm text-[#5C6B88]">No lease records found.</p>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                {selectedLeases.map((lease) => (
+                                                    <div key={lease.id}>
+                                                        <div className="flex items-center justify-between">
+                                                            <p className="text-sm font-medium text-[#1B2B4B]">
+                                                                {formatDateDisplay(lease.startDate)} - {formatDateDisplay(lease.endDate)}
+                                                            </p>
+                                                            {leaseStatusBadge(lease.status)}
+                                                        </div>
+                                                        <p className="mt-0.5 text-xs text-[#5C6B88]">
+                                                            Rent: P{Number(lease.rent).toLocaleString()} · Deposit: P{Number(lease.deposit).toLocaleString()} · {lease.paymentMethod}
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* ── Payments Tab ── */}
+                        {detailTab === 'Payments' && (
+                            <div className="space-y-4">
+                                {tenantInvoices.length === 0 ? (
+                                    <p className="text-sm text-[#5C6B88]">No payment records found.</p>
+                                ) : (
+                                    tenantInvoices.map((inv) => (
+                                        <div key={inv.id} className="flex items-center justify-between rounded-xl border border-[#1B2B4B]/10 bg-white p-4 shadow-sm">
+                                            <div>
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">{inv.period}</p>
+                                                <p className="text-xs text-[#5C6B88]">{inv.invoiceNo}</p>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-sm font-bold">P{inv.total.toLocaleString()}</span>
+                                                {statusBadge(inv.status)}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Lease Records Tab ── */}
+                        {detailTab === 'Lease Records' && (
+                            <div className="space-y-4">
+                                {selectedLeases.length === 0 ? (
+                                    <p className="text-sm text-[#5C6B88]">No lease records found.</p>
+                                ) : (
+                                    selectedLeases.map((lease) => (
+                                        <div key={lease.id} className="rounded-xl border border-[#1B2B4B]/10 bg-white p-5 shadow-sm">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-sm font-semibold text-[#1B2B4B]">
+                                                    {formatDateDisplay(lease.startDate)} - {formatDateDisplay(lease.endDate)}
+                                                </p>
+                                                {leaseStatusBadge(lease.status)}
+                                            </div>
+                                            <div className="mt-3 grid grid-cols-3 gap-4 text-sm">
+                                                <div>
+                                                    <p className="text-xs text-[#5C6B88]">Rent</p>
+                                                    <p className="font-semibold text-[#1B2B4B]">P{Number(lease.rent).toLocaleString()}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-[#5C6B88]">Deposit</p>
+                                                    <p className="font-semibold text-[#1B2B4B]">P{Number(lease.deposit).toLocaleString()}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-[#5C6B88]">Method</p>
+                                                    <div className="mt-0.5">{methodBadge(lease.paymentMethod)}</div>
+                                                </div>
+                                            </div>
+                                            {lease.terms && (
+                                                <div className="mt-3 border-t border-[#1B2B4B]/8 pt-3">
+                                                    <p className="text-xs text-[#5C6B88]">Terms</p>
+                                                    <p className="mt-1 whitespace-pre-wrap text-sm text-[#1B2B4B]">{lease.terms}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Maintenance Tab ── */}
+                        {detailTab === 'Maintenance' && (
+                            <p className="text-sm text-[#5C6B88]">Maintenance requests coming soon.</p>
+                        )}
                     </div>
                 </Modal>
             )}
@@ -934,27 +1021,6 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                             error={renewErrors.deposit}
                             full
                         />
-                        <Select
-                            label="Payment Method"
-                            value={renewForm.paymentMethod}
-                            onChange={(e) =>
-                                setRenewForm((f) => {
-                                    setRenewErrors((prev) => ({
-                                        ...prev,
-                                        paymentMethod: undefined,
-                                    }));
-                                    return {
-                                        ...f,
-                                        paymentMethod: e.target.value,
-                                    };
-                                })
-                            }
-                            error={renewErrors.paymentMethod}
-                            full
-                        >
-                            <option value="GCash">GCash</option>
-                            <option value="Cash">Cash</option>
-                        </Select>
                         <div className="col-span-2">
                             <Textarea
                                 label="Lease Terms"
@@ -982,136 +1048,231 @@ export default function TenantsPage({ openAddSignal = 0 }) {
 
             <Modal
                 open={addOpen}
-                onClose={() => setAddOpen(false)}
+                onClose={() => {
+                    if (!isSaving) {
+                        setAddOpen(false);
+                        setAddErrors({});
+                    }
+                }}
                 title="Add New Tenant"
                 size="lg"
                 footer={
                     <>
                         <Button
                             variant="ghost"
-                            onClick={() => setAddOpen(false)}
+                            onClick={() => {
+                                if (!isSaving) {
+                                    setAddOpen(false);
+                                    setAddErrors({});
+                                }
+                            }}
+                            disabled={isSaving}
                         >
                             Cancel
                         </Button>
                         <Button
                             variant="primary"
                             onClick={saveTenant}
-                            disabled={availableUnits.length === 0}
+                            disabled={availableUnits.length === 0 || isSaving}
+                            loading={isSaving}
                         >
-                            Save Tenant
+                            {isSaving ? 'Saving...' : 'Save Tenant'}
                         </Button>
                     </>
                 }
             >
                 <div className="grid grid-cols-2 gap-4">
-                    <Input
-                        label="Business Name"
-                        placeholder="e.g. ABC Corp"
-                        value={addForm.name}
-                        onChange={(e) =>
-                            setAddForm((f) => ({ ...f, name: e.target.value }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Contact Person"
-                        placeholder="Full name"
-                        value={addForm.contact}
-                        onChange={(e) =>
-                            setAddForm((f) => ({
-                                ...f,
-                                contact: e.target.value,
-                            }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Phone"
-                        placeholder="09XX XXX XXXX"
-                        value={addForm.phone}
-                        onChange={(e) =>
-                            setAddForm((f) => ({ ...f, phone: e.target.value }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Email"
-                        placeholder="email@domain.com"
-                        type="email"
-                        value={addForm.email}
-                        onChange={(e) =>
-                            setAddForm((f) => ({ ...f, email: e.target.value }))
-                        }
-                        full
-                    />
-                    <Select
-                        label="Unit (Available Only)"
-                        value={String(addForm.unit_id)}
-                        onChange={(e) => {
-                            setAddForm((f) => ({
-                                ...f,
-                                unit_id: e.target.value,
-                            }));
-                        }}
-                        full
-                    >
-                        {availableUnits.length === 0 && (
-                            <option value="">No available units</option>
+                    <div>
+                        <Input
+                            label="Business Name"
+                            placeholder="e.g. ABC Corp"
+                            value={addForm.name}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, name: e.target.value }));
+                                if (addErrors.name) {
+                                    setAddErrors((e) => ({ ...e, name: undefined }));
+                                }
+                            }}
+                            full
+                            required
+                        />
+                        {addErrors.name && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.name}</p>
                         )}
-                        {availableUnits.map((unit) => (
-                            <option key={unit.id} value={String(unit.id)}>
-                                {unit.number} · {unit.floor} · {unit.type}
-                            </option>
-                        ))}
-                    </Select>
-                    <Select
-                        label="Payment Method"
-                        value={addForm.paymentMethod}
-                        onChange={(e) =>
-                            setAddForm((f) => ({
-                                ...f,
-                                paymentMethod: e.target.value,
-                            }))
-                        }
-                        full
-                    >
-                        <option value="GCash">GCash</option>
-                        <option value="Cash">Cash</option>
-                    </Select>
-                    <Input
-                        label="Lease Start"
-                        type="date"
-                        value={addForm.leaseStart}
-                        onChange={(e) =>
-                            setAddForm((f) => ({
-                                ...f,
-                                leaseStart: e.target.value,
-                            }))
-                        }
-                        full
-                    />
-                    <Input
-                        label="Lease End"
-                        type="date"
-                        value={addForm.leaseEnd}
-                        onChange={(e) =>
-                            setAddForm((f) => ({
-                                ...f,
-                                leaseEnd: e.target.value,
-                            }))
-                        }
-                        full
-                    />
+                    </div>
+                    <div>
+                        <Input
+                            label="Contact Person"
+                            placeholder="Full name"
+                            value={addForm.contact}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, contact: e.target.value }));
+                                if (addErrors.contact) {
+                                    setAddErrors((e) => ({ ...e, contact: undefined }));
+                                }
+                            }}
+                            full
+                            required
+                        />
+                        {addErrors.contact && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.contact}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Phone"
+                            placeholder="09XX XXX XXXX"
+                            value={addForm.phone}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, phone: e.target.value }));
+                                if (addErrors.phone) {
+                                    setAddErrors((e) => ({ ...e, phone: undefined }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.phone && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.phone}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Email"
+                            placeholder="email@domain.com"
+                            type="email"
+                            value={addForm.email}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, email: e.target.value }));
+                                if (addErrors.email) {
+                                    setAddErrors((e) => ({ ...e, email: undefined }));
+                                }
+                            }}
+                            full
+                            required
+                        />
+                        {addErrors.email && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.email}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Select
+                            label="Unit (Available Only)"
+                            value={String(addForm.unit_id)}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, unit_id: e.target.value }));
+                                if (addErrors.unit_id) {
+                                    setAddErrors((e) => ({ ...e, unit_id: undefined }));
+                                }
+                            }}
+                            full
+                        >
+                            <option value="">Select a unit</option>
+                            {availableUnits.length === 0 && (
+                                <option value="" disabled>No available units</option>
+                            )}
+                            {availableUnits.map((unit) => (
+                                <option key={unit.id} value={String(unit.id)}>
+                                    {unit.number} · {unit.floor} · {unit.type}
+                                </option>
+                            ))}
+                        </Select>
+                        {addErrors.unit_id && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.unit_id}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Occupation"
+                            placeholder="e.g. Business Owner"
+                            value={addForm.occupation}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, occupation: e.target.value }));
+                                if (addErrors.occupation) {
+                                    setAddErrors((e) => ({ ...e, occupation: undefined }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.occupation && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.occupation}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Monthly Income"
+                            type="number"
+                            min="0"
+                            placeholder="e.g. 50000"
+                            value={addForm.monthlyIncome}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, monthlyIncome: e.target.value }));
+                                if (addErrors.monthlyIncome) {
+                                    setAddErrors((e) => ({ ...e, monthlyIncome: undefined }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.monthlyIncome && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.monthlyIncome}</p>
+                        )}
+                    </div>
+                    <div className="col-span-2">
+                        <Input
+                            label="Emergency Contact"
+                            placeholder="Full name and contact number"
+                            value={addForm.emergencyContact}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, emergencyContact: e.target.value }));
+                                if (addErrors.emergencyContact) {
+                                    setAddErrors((e) => ({ ...e, emergencyContact: undefined }));
+                                }
+                            }}
+                            full
+                        />
+                        {addErrors.emergencyContact && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.emergencyContact}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Input
+                            label="Move-In Date"
+                            type="date"
+                            value={addForm.moveInDate}
+                            onChange={(e) => {
+                                setAddForm((f) => ({ ...f, moveInDate: e.target.value }));
+                                if (addErrors.lease_start) {
+                                    setAddErrors((e) => ({ ...e, lease_start: undefined }));
+                                }
+                            }}
+                            full
+                            required
+                        />
+                        {addErrors.lease_start && (
+                            <p className="mt-1 text-xs text-red-600">{addErrors.lease_start}</p>
+                        )}
+                    </div>
+                    <div>
+                        <Select
+                            label="Lease Duration"
+                            value={addForm.leaseDuration}
+                            onChange={(e) =>
+                                setAddForm((f) => ({ ...f, leaseDuration: e.target.value }))
+                            }
+                            full
+                            required
+                        >
+                            <option value="3">3 months</option>
+                            <option value="6">6 months</option>
+                            <option value="12">12 months</option>
+                        </Select>
+                    </div>
                     <div className="col-span-2">
                         <Textarea
                             label="Notes"
                             placeholder="Optional notes"
                             value={addForm.notes}
                             onChange={(e) =>
-                                setAddForm((f) => ({
-                                    ...f,
-                                    notes: e.target.value,
-                                }))
+                                setAddForm((f) => ({ ...f, notes: e.target.value }))
                             }
                             full
                         />
@@ -1396,6 +1557,46 @@ export default function TenantsPage({ openAddSignal = 0 }) {
                         </div>
                     </div>
                 </Modal>
+            )}
+
+            {confirmAction && (
+                <ConfirmModal
+                    open
+                    onClose={() => setConfirmAction(null)}
+                    onConfirm={() => {
+                        if (confirmAction.type === 'archive') confirmArchive();
+                        if (confirmAction.type === 'restore') confirmRestore();
+                        if (confirmAction.type === 'edit') confirmEdit();
+                        if (confirmAction.type === 'moveOut') confirmMoveOut();
+                        if (confirmAction.type === 'renew') confirmRenew();
+                    }}
+                    title={
+                        confirmAction.type === 'archive' ? 'Archive Tenant' :
+                        confirmAction.type === 'restore' ? 'Restore Tenant' :
+                        confirmAction.type === 'edit' ? 'Save Changes' :
+                        confirmAction.type === 'moveOut' ? 'Confirm Move-Out' :
+                        'Renew Lease'
+                    }
+                    message={
+                        confirmAction.type === 'moveOut'
+                            ? `Confirm move-out for ${confirmAction.name}? This will end all leases and free all units.`
+                            : confirmAction.type === 'archive' ? 'Archive this tenant?' :
+                              confirmAction.type === 'restore' ? 'Restore this tenant?' :
+                              confirmAction.type === 'edit' ? 'Save changes to this tenant?' :
+                              'Create a new lease term for this tenant?'
+                    }
+                    variant={
+                        confirmAction.type === 'archive' || confirmAction.type === 'moveOut'
+                            ? 'danger' : 'primary'
+                    }
+                    confirmLabel={
+                        confirmAction.type === 'moveOut' ? 'Confirm Move-Out' :
+                        confirmAction.type === 'archive' ? 'Archive' :
+                        confirmAction.type === 'restore' ? 'Restore' :
+                        confirmAction.type === 'edit' ? 'Save Changes' :
+                        'Create Lease'
+                    }
+                />
             )}
         </div>
     );

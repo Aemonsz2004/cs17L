@@ -98,7 +98,7 @@ it('allows tenant to submit payment for own invoice', function () {
         ->assertRedirect(route('tenant.pay-rent'));
 
     $invoice->refresh();
-    expect($invoice->status)->toBe('due');
+    expect($invoice->status)->toBe('pending');
     expect($invoice->method)->toBe('GCash');
     expect($invoice->paid_date)->toBeNull();
 

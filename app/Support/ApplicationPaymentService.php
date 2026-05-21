@@ -20,8 +20,8 @@ class ApplicationPaymentService
 
     public function initiateDepositPayment(RentalApplication $application, string $paymentMethod, bool $forceRegenerate = false): ApplicationPayment
     {
-        if ($application->status !== RentalApplication::STATUS_PAYMENT_PENDING) {
-            throw new \RuntimeException('Payment checkout is only available during the payment-pending stage.');
+        if ($application->status !== RentalApplication::STATUS_APPROVED) {
+            throw new \RuntimeException('Payment checkout is only available for approved applications.');
         }
 
         $application->loadMissing('unit');
@@ -52,7 +52,7 @@ class ApplicationPaymentService
         return DB::transaction(function () use ($application, $paymentMethod, $checkoutPayload, $amount, $expiresAt): ApplicationPayment {
             $application->refresh();
 
-            if ($application->status !== RentalApplication::STATUS_PAYMENT_PENDING) {
+            if ($application->status !== RentalApplication::STATUS_APPROVED) {
                 throw new \RuntimeException('Application is no longer eligible for deposit payment.');
             }
 
@@ -100,10 +100,75 @@ class ApplicationPaymentService
             RtmsNotification::create([
                 'variant' => 'amber',
                 'message' => 'Deposit payment checkout created. Waiting for PayMongo webhook verification.',
-                'category' => 'payment',
+                'category' => 'lease',
                 'tenant_id' => null,
                 'unread' => true,
             ]);
+
+            return $payment;
+        });
+    }
+
+    public function processDirectGcashPayment(RentalApplication $application): ApplicationPayment
+    {
+        if ($application->status !== RentalApplication::STATUS_APPROVED) {
+            throw new \RuntimeException('Payment is only available for approved applications.');
+        }
+
+        $application->loadMissing('unit');
+
+        if (! $application->unit) {
+            throw new \RuntimeException('Application unit could not be found.');
+        }
+
+        $amount = (int) $application->unit->base_rent * 2;
+
+        return DB::transaction(function () use ($application, $amount): ApplicationPayment {
+            $application->refresh();
+
+            ApplicationPayment::where('rental_application_id', $application->id)
+                ->where('status', 'payment_pending')
+                ->update(['status' => 'expired', 'expires_at' => now(), 'updated_at' => now()]);
+
+            $reference = 'gcash_direct_'.Str::lower(Str::random(16));
+
+            $payment = ApplicationPayment::create([
+                'rental_application_id' => $application->id,
+                'user_id' => $application->user_id,
+                'provider' => 'gcash_direct',
+                'provider_reference' => $reference,
+                'checkout_url' => null,
+                'amount' => $amount,
+                'currency' => 'PHP',
+                'payment_method' => 'GCash',
+                'status' => 'payment_paid',
+                'metadata' => ['unit_id' => $application->unit_id],
+                'paid_at' => now(),
+                'verified_at' => now(),
+            ]);
+
+            $application->update([
+                'payment_method' => 'GCash',
+                'deposit_submitted_at' => now(),
+                'status' => RentalApplication::STATUS_PAID,
+            ]);
+
+            $this->audit->logContext(
+                $application,
+                (int) $application->user_id,
+                'GCash payment completed (direct/simulated).',
+                ['payment_id' => $payment->id, 'provider_reference' => $reference],
+            );
+
+            RtmsNotification::create([
+                'variant' => 'teal',
+                'message' => 'GCash payment completed. Application marked as paid.',
+                'category' => 'lease',
+                'tenant_id' => null,
+                'unread' => true,
+            ]);
+
+            event(new PaymentVerifiedEvent((int) $application->id, (int) $payment->id, 'direct_'.$reference));
 
             return $payment;
         });
@@ -482,17 +547,13 @@ class ApplicationPaymentService
                 return;
             }
 
-            if ($isPaidEvent && in_array($application->status, [RentalApplication::STATUS_PAYMENT_PENDING, RentalApplication::STATUS_PAYMENT_PAID], true)) {
-                $application->update([
-                    'payment_verified_at' => now(),
-                    'payment_paid_at' => now(),
-                    'deposit_confirmed_at' => now(),
-                ]);
+            if ($isPaidEvent && $application->status === RentalApplication::STATUS_APPROVED) {
+                $application->update(['status' => RentalApplication::STATUS_PAID]);
 
                 $this->audit->logContext(
                     $application,
                     null,
-                    'Payment verified via webhook.',
+                    'Payment verified via webhook. Auto-marked as paid.',
                     [
                         'payment_id' => $payment->id,
                         'provider_event_id' => $providerEventId,
@@ -520,9 +581,9 @@ class ApplicationPaymentService
             RtmsNotification::create([
                 'variant' => $isPaidEvent ? 'teal' : 'red',
                 'message' => $isPaidEvent
-                    ? 'Payment verified via PayMongo webhook. Auto-conversion process started.'
+                    ? 'GCash payment verified. Application auto-marked as paid.'
                     : 'Payment marked as failed/expired by PayMongo webhook.',
-                'category' => 'payment',
+                'category' => 'lease',
                 'tenant_id' => null,
                 'unread' => true,
             ]);

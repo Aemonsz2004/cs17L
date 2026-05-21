@@ -31,7 +31,6 @@ class TenantService
                 $unit->update([
                     'tenant_id' => $existingTenant->id,
                     'status' => 'occupied',
-                    'reserved_until' => null,
                 ]);
 
                 UnitHistory::create([
@@ -59,7 +58,6 @@ class TenantService
             'contact' => $application->occupation,
             'phone' => $application->emergency_contact,
             'email' => $user->email,
-            'unit' => $unit->number,
             'floor' => $unit->floor,
             'type' => $unit->type,
             'rent' => $unit->base_rent,
@@ -78,9 +76,8 @@ class TenantService
             'rent' => $unit->base_rent,
             'deposit' => $unit->base_rent * 2,
             'payment_method' => $paymentMethod,
-            'status' => 'active',
-            'terms' => $application->lease_terms,
-            'acknowledged_at' => $application->lease_acknowledged_at,
+            'status' => Lease::STATUS_ACTIVE,
+            'terms' => $application->lease_terms ?? null,
         ]);
 
         $user->update([
@@ -93,7 +90,6 @@ class TenantService
         $unit->update([
             'tenant_id' => $tenant->id,
             'status' => 'occupied',
-            'reserved_until' => null,
         ]);
 
         UnitHistory::create([
@@ -110,12 +106,10 @@ class TenantService
     {
         $parts = preg_split('/\s+/', trim($name)) ?: [];
         $initials = '';
-
         foreach ($parts as $part) {
             if ($part === '') {
                 continue;
             }
-
             $initials .= strtoupper(substr($part, 0, 1));
             if (strlen($initials) >= 4) {
                 break;

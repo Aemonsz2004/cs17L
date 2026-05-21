@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\StoreInvoiceRequest;
 use App\Models\Invoice;
 use App\Models\Lease;
 use App\Models\Tenant;
@@ -22,12 +23,16 @@ class BillingController extends Controller
             'initialPage' => 'billing',
             'invoices' => Invoice::with([
                 'tenant' => fn ($query) => $query->withTrashed(),
+                'tenant.units',
             ])->latest()->get(),
             'archivedInvoices' => Invoice::onlyTrashed()
-                ->with(['tenant' => fn ($query) => $query->withTrashed()])
+                ->with([
+                    'tenant' => fn ($query) => $query->withTrashed(),
+                    'tenant.units',
+                ])
                 ->latest('deleted_at')
                 ->get(),
-            'tenants' => Tenant::latest()->get(),
+            'tenants' => Tenant::with('units')->latest()->get(),
         ]);
     }
 
@@ -39,18 +44,9 @@ class BillingController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreInvoiceRequest $request): RedirectResponse
     {
-        $data = $request->validate([
-            'tenant_id' => ['required', 'exists:tenants,id'],
-            'period' => ['required', 'string', 'max:50'],
-            'rent' => ['required', 'integer', 'min:0'],
-            'utilities' => ['nullable', 'integer', 'min:0'],
-            'penalty' => ['nullable', 'integer', 'min:0'],
-            'due_date' => ['required', 'date'],
-            'method' => ['nullable', 'in:GCash,Cash'],
-            'status' => ['nullable', 'in:paid,due,overdue'],
-        ]);
+        $data = $request->validated();
 
         $data['utilities'] = $data['utilities'] ?? 0;
         $data['penalty'] = $data['penalty'] ?? 0;

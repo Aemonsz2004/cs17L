@@ -1,30 +1,36 @@
 // src/components/layout/TenantSidebar.jsx
 import { router } from '@inertiajs/react';
 import Icon from '../../components/Icon';
-const NAV = [
-    {
-        section: 'My Space',
-        items: [
-            { id: 'my-unit', label: 'My Unit' },
-            { id: 'lease', label: 'Lease' },
-        ],
-    },
-    {
-        section: 'Transactions',
-        items: [
-            { id: 'billing', label: 'Billing' },
-            { id: 'pay-rent', label: 'Pay Rent' },
-        ],
-    },
-    {
-        section: 'Support',
-        items: [
-            { id: 'maintenance', label: 'Maintenance' },
-            { id: 'messages', label: 'Messages' },
-            { id: 'notifications', label: 'Notifications' },
-        ],
-    },
-];
+
+function buildNav(isMovedOut) {
+    const base = [
+        {
+            section: 'My Space',
+            items: [
+                { id: 'my-unit', label: isMovedOut ? 'Browse Units' : 'My Unit' },
+                ...(!isMovedOut ? [{ id: 'lease', label: 'Lease' }] : []),
+            ],
+        },
+        {
+            section: 'Transactions',
+            items: !isMovedOut
+                ? [
+                      { id: 'billing', label: 'Billing' },
+                      { id: 'pay-rent', label: 'Pay Rent' },
+                  ]
+                : [],
+        },
+        {
+            section: 'Support',
+            items: [
+                { id: 'maintenance', label: 'Maintenance' },
+                { id: 'messages', label: 'Messages' },
+                { id: 'notifications', label: 'Notifications' },
+            ],
+        },
+    ];
+    return base.filter((g) => g.items.length > 0);
+}
 const navIcon = {
     'my-unit': 'home',
     lease: 'file-text',
@@ -34,13 +40,18 @@ const navIcon = {
     messages: 'message-square',
     notifications: 'bell',
 };
+const NAV_TEMPLATE = buildNav(false);
+
 export default function TenantSidebar({
     activeId,
     onNavigate,
     user,
     notifCount = 0,
     messageCount = 0,
+    isMovedOut = false,
 }) {
+    const NAV = isMovedOut ? buildNav(true) : NAV_TEMPLATE;
+
     return (
         <aside className="flex h-full w-[210px] flex-shrink-0 flex-col bg-[var(--rtms-navy)]">
             {/* Brand */}

@@ -1,4 +1,5 @@
 // src/pages/tenant/MyUnitPage.jsx
+import { router } from '@inertiajs/react';
 import Avatar from '../../components/Avatar';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
@@ -26,6 +27,8 @@ export default function MyUnitPage({
     tenant,
     invoices = [],
     maintenance = [],
+    isMovedOut = false,
+    availableUnits = [],
 }) {
     const paidThisMonth = useMemo(
         () => invoices.find((invoice) => invoice.status === 'paid'),
@@ -40,6 +43,59 @@ export default function MyUnitPage({
         tenant?.lease_start ?? new Date().toISOString(),
         tenant?.lease_end ?? new Date().toISOString(),
     );
+    if (isMovedOut) {
+        return (
+            <div className="space-y-5">
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 px-6 py-5">
+                    <h2 className="text-lg font-bold text-[#15233d]">You have moved out</h2>
+                    <p className="mt-1 text-sm text-[#42506b]">
+                        Browse available units below and apply for a new one.
+                    </p>
+                </div>
+                {availableUnits.length === 0 ? (
+                    <Card>
+                        <Card.Body>
+                            <p className="text-sm text-[#5C6B88]">No units are currently available.</p>
+                        </Card.Body>
+                    </Card>
+                ) : (
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        {availableUnits.map((unit) => (
+                            <article key={unit.id} className="rounded-2xl border border-[#15233d]/10 bg-white p-4 shadow-sm">
+                                <img
+                                    src={unit.gallery?.[0]}
+                                    alt={`Unit ${unit.number}`}
+                                    className="h-36 w-full rounded-xl object-cover"
+                                />
+                                <h3 className="mt-3 text-lg font-bold">Unit {unit.number}</h3>
+                                <p className="text-sm text-[#42506b]">
+                                    {unit.floor} · {unit.type} · {unit.area} sqm
+                                </p>
+                                <p className="mt-2 text-xl font-black text-[#1d7b6e]">
+                                    P{Number(unit.base_rent).toLocaleString()}/month
+                                </p>
+                                <div className="mt-3 flex gap-2">
+                                    <a
+                                        href={`/units/${unit.id}`}
+                                        className="rounded-lg border border-[#15233d]/20 px-3 py-2 text-sm font-medium hover:bg-[#f8fafc]"
+                                    >
+                                        View Details
+                                    </a>
+                                    <button
+                                        type="button"
+                                        onClick={() => router.visit(`/tenant/reapply/${unit.id}`)}
+                                        className="rounded-lg bg-[#15233d] px-3 py-2 text-sm font-medium text-white hover:bg-[#0f1a2d]"
+                                    >
+                                        Apply
+                                    </button>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
     if (!tenant) {
         return (
             <Card>
@@ -52,7 +108,7 @@ export default function MyUnitPage({
         );
     }
     return (
-        <div className="max-w-5xl space-y-5">
+        <div className="space-y-5">
             {/* ── Welcome banner ── */}
             <div className="flex items-center justify-between rounded-2xl bg-[#1B2B4B] px-7 py-5">
                 <div className="flex items-center gap-4">
@@ -223,7 +279,7 @@ export default function MyUnitPage({
                         />
                         <InfoRow label="Floor" value={tenant.floor} />
                         <InfoRow label="Unit Type" value={tenant.type} />
-                        <InfoRow label="Area" value="-" />
+                        <InfoRow label="Area (sqm)" value={tenant.units?.[0]?.area?.toLocaleString() ?? '-'} />
                         <InfoRow
                             label="Monthly Rent"
                             value={

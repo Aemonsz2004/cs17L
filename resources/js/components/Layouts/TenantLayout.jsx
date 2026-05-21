@@ -10,16 +10,18 @@ export default function TenantLayout({
     navbarAction,
     notifCount = 0,
     onNotifClick,
+    isMovedOut = false,
     children,
 }) {
     return (
-        <div className="flex h-screen w-screen overflow-hidden bg-[var(--rtms-bg)] font-sans">
+        <div className="flex h-dvh max-w-full overflow-hidden bg-[var(--rtms-bg)] font-sans">
             <TenantSidebar
                 activeId={activeId}
                 onNavigate={onNavigate}
                 user={user}
                 notifCount={notifCount}
                 messageCount={messageCount}
+                isMovedOut={isMovedOut}
             />
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                 <TenantNavbar
@@ -30,7 +32,7 @@ export default function TenantLayout({
                     onNotifClick={onNotifClick}
                 />
                 <main className="flex-1 overflow-y-auto">
-                    <div className="p-6">{children}</div>
+                    <div className="p-6" style={{ zoom: 1.25 }}>{children}</div>
                 </main>
             </div>
         </div>

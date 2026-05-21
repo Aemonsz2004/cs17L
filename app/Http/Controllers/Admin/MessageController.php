@@ -17,9 +17,10 @@ class MessageController extends Controller
     {
         return Inertia::render('welcome', [
             'initialPage' => 'messages',
-            'messages' => Message::with('tenant:id,name,unit')
-                ->latest()
-                ->get(),
+            'messages' => Message::with([
+                'tenant:id,name',
+                'tenant.units',
+            ])->latest()->get(),
         ]);
     }
 

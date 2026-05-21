@@ -18,8 +18,8 @@ export default function MetricCard({
         <div
             onClick={onClick}
             className={[
-                'flex flex-col gap-1 rounded-xl bg-[#F5F0E8]/70 p-4',
-                onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : '',
+                'flex flex-col gap-1 rounded-xl border border-[#1B2B4B]/10 bg-white p-4 shadow-sm transition-colors hover:bg-gray-50',
+                onClick ? 'cursor-pointer' : '',
                 className,
             ].join(' ')}
         >

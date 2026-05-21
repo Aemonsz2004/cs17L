@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\TenantController;
 use App\Http\Controllers\Admin\UnitController;
 use App\Http\Controllers\Applicant\ApplicationController as ApplicantApplicationController;
+use App\Http\Controllers\Applicant\PaymentController as ApplicantPaymentController;
 use App\Http\Controllers\Applicant\RegisterController as ApplicantRegisterController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\GuestRegistrationController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Tenant\MessageController;
 use App\Http\Controllers\Tenant\NotificationController as TenantNotificationController;
 use App\Http\Controllers\Tenant\PaymentController;
 use App\Http\Controllers\Tenant\PayMongoDemoController;
+use App\Http\Controllers\Tenant\ReapplyController;
 use App\Http\Controllers\Webhook\PayMongoWebhookController;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
@@ -137,12 +139,11 @@ Route::middleware(['auth', 'admin'])
         Route::prefix('applications')->name('applications.')->group(function () {
             Route::get('/', [ApplicationReviewController::class, 'index'])->name('index');
             Route::post('/{application}/approve', [ApplicationReviewController::class, 'approve'])->name('approve');
-            Route::patch('/{application}/reject', [ApplicationReviewController::class, 'reject'])->name('reject');
-            Route::patch('/{application}/send-lease', [ApplicationReviewController::class, 'sendLease'])->name('send-lease');
-            Route::patch('/{application}/confirm-deposit', [ApplicationReviewController::class, 'confirmDeposit'])->name('confirm-deposit');
-            Route::post('/{application}/convert-tenant', [ApplicationReviewController::class, 'convertToTenant'])->name('convert-tenant');
+            Route::post('/{application}/reject', [ApplicationReviewController::class, 'reject'])->name('reject');
+            Route::post('/{application}/confirm-payment', [ApplicationReviewController::class, 'confirmPayment'])->name('confirm-payment');
+            Route::post('/{application}/confirm-move-in', [ApplicationReviewController::class, 'confirmMoveIn'])->name('confirm-move-in');
             Route::delete('/{application}', [ApplicationReviewController::class, 'destroy'])->name('destroy');
-            Route::post('/{application}/restore', [ApplicationReviewController::class, 'restore'])->name('restore');
+            Route::post('/{applicationId}/restore', [ApplicationReviewController::class, 'restore'])->name('restore');
         });
 
         // Tenant messages
@@ -182,6 +183,7 @@ Route::middleware(['auth', 'tenant'])
         // Maintenance
         Route::get('/maintenance', [TenantMaintenanceController::class, 'index'])->name('maintenance');
         Route::post('/maintenance', [TenantMaintenanceController::class, 'store'])->name('maintenance.store');
+        Route::post('/maintenance/{maintenance}/mark-done', [TenantMaintenanceController::class, 'markDone'])->name('maintenance.mark-done');
         Route::delete('/maintenance/{maintenance}', [TenantMaintenanceController::class, 'destroy'])->name('maintenance.destroy');
         Route::post('/maintenance/{maintenance}/restore', [TenantMaintenanceController::class, 'restore'])->name('maintenance.restore');
 
@@ -197,6 +199,10 @@ Route::middleware(['auth', 'tenant'])
             Route::delete('/{notification}', [TenantNotificationController::class, 'destroy'])->name('destroy');
             Route::post('/{notification}/restore', [TenantNotificationController::class, 'restore'])->name('restore');
         });
+
+        // Re-apply (for moved-out tenants)
+        Route::get('/reapply/{unit}', [ReapplyController::class, 'create'])->name('reapply');
+        Route::post('/reapply/{unit}', [ReapplyController::class, 'store'])->name('reapply.store');
     });
 
 Route::middleware(['auth', 'applicant'])
@@ -206,8 +212,7 @@ Route::middleware(['auth', 'applicant'])
         Route::get('/dashboard', [ApplicantApplicationController::class, 'dashboard'])->name('dashboard');
         Route::get('/form', [ApplicantApplicationController::class, 'create'])->name('form');
         Route::post('/form', [ApplicantApplicationController::class, 'store'])->name('form.store');
-        Route::post('/{application}/acknowledge-lease', [ApplicantApplicationController::class, 'acknowledgeLease'])->name('acknowledge-lease');
-        Route::post('/{application}/submit-deposit', [ApplicantApplicationController::class, 'submitDeposit'])->name('submit-deposit');
+        Route::post('/payment/choose', [ApplicantPaymentController::class, 'chooseMethod'])->name('payment.choose');
     });
 
 // NEW ADDED ROUTES

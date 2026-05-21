@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import Badge from '../../components/Badge';
 import Button from '../../components/Button';
 import Card from '../../components/Card';
+import ConfirmModal from '../../components/ConfirmModal';
 import InfoRow from '../../components/InfoRow';
 import { Input, Select } from '../../components/Input';
 import MetricCard from '../../components/MetricCard';
@@ -31,12 +32,9 @@ const statusColor = {
     vacant: 'bg-[#FAF8F4] border border-dashed border-[#1B2B4B]/20 text-[#5C6B88]',
 };
 export default function UnitsPage({ openAddSignal = 0 }) {
-    const {
-        units: unitRows,
-        archivedUnits: archivedUnitRows,
-        tenants: tenantRows,
-    } = usePage().props;
-    const mappedUnits = (unitRows ?? []).map((unit) => ({
+    const page = usePage();
+    const { tenants: tenantRows } = page.props;
+    const units = useMemo(() => (page.props.units ?? []).map((unit) => ({
         id: unit.id,
         number: unit.number,
         floor: unit.floor,
@@ -56,11 +54,11 @@ export default function UnitsPage({ openAddSignal = 0 }) {
             startDate: h.start_date,
             endDate: h.end_date,
         })),
-    }));
-    const mappedArchivedUnits = (archivedUnitRows ?? []).map((unit) => ({
+    })), [page.props.units]);
+    const archivedUnits = useMemo(() => (page.props.archivedUnits ?? []).map((unit) => ({
         id: unit.id,
         number: unit.number,
-        floor: unit.floor,
+        floor: unit.floor,  
         type: unit.type,
         area: unit.area,
         baseRent: unit.base_rent,
@@ -77,9 +75,7 @@ export default function UnitsPage({ openAddSignal = 0 }) {
             startDate: h.start_date,
             endDate: h.end_date,
         })),
-    }));
-    const [units, setUnits] = useState(mappedUnits);
-    const [archivedUnits, setArchivedUnits] = useState(mappedArchivedUnits);
+    })), [page.props.archivedUnits]);
     const [viewMode, setViewMode] = useState('active');
     const [view, setView] = useState('grid');
     const [floor, setFloor] = useState('All');
@@ -99,19 +95,11 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         galleryFiles: [],
     });
     const [addErrors, setAddErrors] = useState({});
+    const [addSaving, setAddSaving] = useState(false);
     const [editForm, setEditForm] = useState({ galleryFiles: [] });
     const [editErrors, setEditErrors] = useState({});
-    const lastHandledSignal = useRef(openAddSignal);
-    useEffect(() => {
-        setUnits(mappedUnits);
-        if (openAddSignal !== lastHandledSignal.current) {
-            setAddOpen(true);
-            lastHandledSignal.current = openAddSignal;
-        }
-    }, [openAddSignal, unitRows]);
-    useEffect(() => {
-        setArchivedUnits(mappedArchivedUnits);
-    }, [archivedUnitRows]);
+    const [editSaving, setEditSaving] = useState(false);
+    const [confirmAction, setConfirmAction] = useState(null);
     useEffect(() => {
         if (viewMode === 'archived' && view === 'grid') {
             setView('table');
@@ -142,10 +130,12 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         ? (tenantRows ?? []).find((t) => t.id === selected.tenantId)
         : null;
     const restoreUnit = (unitId) => {
-        if (!window.confirm('Restore this unit?')) {
-            return;
-        }
-        router.post(`/admin/units/${unitId}/restore`);
+        setConfirmAction({ type: 'restore', unitId });
+    };
+    const confirmRestore = () => {
+        if (!confirmAction) return;
+        setConfirmAction(null);
+        router.post(`/admin/units/${confirmAction.unitId}/restore`);
     };
     const tableColumns = [
         { key: 'number', label: 'Unit', width: 80 },
@@ -209,33 +199,34 @@ export default function UnitsPage({ openAddSignal = 0 }) {
             ),
         },
     ];
+    const scrollToFirstError = (errors) => {
+        if (!errors) return;
+        const keys = Object.keys(errors);
+        if (keys.length === 0) return;
+        const firstKey = keys[0];
+        const el = document.getElementById(firstKey);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.focus({ preventScroll: true });
+        }
+    };
     const saveNewUnit = () => {
+        setAddErrors({});
         const errors = {};
-        const normalizedNumber = addForm.number.trim().toUpperCase();
-
-        if (!normalizedNumber) {
-            errors.number = 'Unit number is required.';
-        } else if (
-            units.some(
-                (unit) => unit.number.trim().toUpperCase() === normalizedNumber,
-            )
-        ) {
-            errors.number = 'Unit number already exists.';
+        if (!addForm.baseRent || Number(addForm.baseRent) < 1) {
+            errors.baseRent = 'Base rent is required and must be at least 1.';
         }
-
-        if (!addForm.area || Number(addForm.area) <= 0) {
-            errors.area = 'Area must be greater than 0.';
+        if (!addForm.area || Number(addForm.area) < 1) {
+            errors.area = 'Area is required and must be at least 1.';
         }
-
-        if (!addForm.baseRent || Number(addForm.baseRent) < 0) {
-            errors.baseRent = 'Base rent is required.';
-        }
-
         if (Object.keys(errors).length > 0) {
             setAddErrors(errors);
+            setAddSaving(false);
+            scrollToFirstError(errors);
             return;
         }
-
+        setAddSaving(true);
+        const normalizedNumber = addForm.number.trim().toUpperCase();
         const formData = new FormData();
         formData.append('number', normalizedNumber);
         formData.append('floor', addForm.floor);
@@ -252,6 +243,8 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         router.post('/admin/units', formData, {
             forceFormData: true,
             onSuccess: () => {
+                setAddSaving(false);
+                setAddOpen(false);
                 setAddForm({
                     number: '',
                     floor: '1F',
@@ -263,10 +256,11 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                     galleryFiles: [],
                 });
                 setAddErrors({});
-                setAddOpen(false);
             },
             onError: (errors) => {
+                setAddSaving(false);
                 setAddErrors(errors || {});
+                scrollToFirstError(errors);
             },
         });
     };
@@ -280,36 +274,11 @@ export default function UnitsPage({ openAddSignal = 0 }) {
     };
     const saveEdit = () => {
         if (!selected) return;
-        const errors = {};
+        setEditErrors({});
+        setEditSaving(true);
         const normalizedNumber = String(editForm.number ?? '')
             .trim()
             .toUpperCase();
-
-        if (!normalizedNumber) {
-            errors.number = 'Unit number is required.';
-        } else if (
-            units.some(
-                (unit) =>
-                    unit.id !== selected.id &&
-                    unit.number.trim().toUpperCase() === normalizedNumber,
-            )
-        ) {
-            errors.number = 'Unit number already exists.';
-        }
-
-        if (!editForm.area || Number(editForm.area) <= 0) {
-            errors.area = 'Area must be greater than 0.';
-        }
-
-        if (!editForm.baseRent || Number(editForm.baseRent) < 0) {
-            errors.baseRent = 'Base rent is required.';
-        }
-
-        if (Object.keys(errors).length > 0) {
-            setEditErrors(errors);
-            return;
-        }
-
         const hasNewFiles = (editForm.galleryFiles ?? []).length > 0;
         const payload = {
             number: normalizedNumber,
@@ -325,11 +294,14 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         if (!hasNewFiles) {
             router.patch(`/admin/units/${selected.id}`, payload, {
                 onSuccess: () => {
+                    setEditSaving(false);
                     setEditErrors({});
                     setEditOpen(false);
                 },
                 onError: (errors) => {
+                    setEditSaving(false);
                     setEditErrors(errors || {});
+                    scrollToFirstError(errors);
                 },
             });
             return;
@@ -348,25 +320,24 @@ export default function UnitsPage({ openAddSignal = 0 }) {
         router.patch(`/admin/units/${selected.id}`, formData, {
             forceFormData: true,
             onSuccess: () => {
+                setEditSaving(false);
                 setEditErrors({});
                 setEditOpen(false);
             },
             onError: (errors) => {
+                setEditSaving(false);
                 setEditErrors(errors || {});
+                scrollToFirstError(errors);
             },
         });
     };
     const deleteUnit = () => {
-        if (!selected) {
-            return;
-        }
-        if (
-            !window.confirm(
-                `Archive unit ${selected.number}? You can restore it later.`,
-            )
-        ) {
-            return;
-        }
+        if (!selected) return;
+        setConfirmAction({ type: 'archive', number: selected.number });
+    };
+    const confirmDeleteUnit = () => {
+        if (!selected) return;
+        setConfirmAction(null);
         router.delete(`/admin/units/${selected.id}`, {
             onSuccess: () => {
                 setDetailOpen(false);
@@ -409,7 +380,21 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                 <Card.Header
                     title="Unit Overview"
                     action={
+
+                        
                         <div className="flex items-center gap-2">
+
+                            <div>
+                                <Input
+                                    placeholder="Search unit, type, tenant..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="w-52"
+                                />
+                            </div>
+
+
+
                             <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
                                 {['active', 'archived'].map((tab) => (
                                     <button
@@ -426,12 +411,7 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                                     </button>
                                 ))}
                             </div>
-                            <Input
-                                placeholder="Search unit, type, tenant..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="w-52"
-                            />
+
                             <div className="flex gap-0.5 rounded-lg bg-[#F5F0E8] p-0.5">
                                 {FLOORS.map((f) => (
                                     <button
@@ -633,13 +613,7 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                                 border={false}
                             />
                         </>
-                    ) : (
-                        <div className="mt-4 rounded-xl bg-[#FAF8F4] p-4 text-center">
-                            <p className="text-sm text-[#5C6B88]">
-                                This unit is currently vacant.
-                            </p>
-                        </div>
-                    )}
+                    ) : null}
 
                     {(selected.unitHistories ?? []).length > 0 && (
                         <div className="mt-5">
@@ -684,8 +658,8 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                         >
                             Cancel
                         </Button>
-                        <Button variant="primary" onClick={saveNewUnit}>
-                            Save Unit
+                        <Button variant="primary" onClick={saveNewUnit} loading={addSaving}>
+                            {addSaving ? 'Saving...' : 'Save Unit'}
                         </Button>
                     </>
                 }
@@ -762,6 +736,8 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                             label="Area (sqm) *"
                             type="number"
                             value={addForm.area}
+                            error={addErrors.area}
+                            min={1}
                             onChange={(e) => {
                                 setAddForm((f) => ({
                                     ...f,
@@ -776,17 +752,14 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                             }}
                             full
                         />
-                        {addErrors.area && (
-                            <p className="mt-1 text-xs text-red-600">
-                                {addErrors.area}
-                            </p>
-                        )}
                     </div>
                     <div className="col-span-1">
                         <Input
                             label="Base Rent *"
                             type="number"
                             value={addForm.baseRent}
+                            error={addErrors.baseRent}
+                            min={1}
                             onChange={(e) => {
                                 setAddForm((f) => ({
                                     ...f,
@@ -801,11 +774,6 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                             }}
                             full
                         />
-                        {addErrors.baseRent && (
-                            <p className="mt-1 text-xs text-red-600">
-                                {addErrors.baseRent}
-                            </p>
-                        )}
                     </div>
                     <div className="col-span-2">
                         <label className="mb-2 block text-sm font-medium text-[#1B2B4B]">
@@ -850,6 +818,11 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                                     />
                                 ))}
                             </div>
+                        )}
+                        {addErrors.gallery && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {addErrors.gallery}
+                            </p>
                         )}
                     </div>
                 </div>
@@ -1036,6 +1009,25 @@ export default function UnitsPage({ openAddSignal = 0 }) {
                         </Select>
                     </div>
                 </Modal>
+            )}
+
+            {confirmAction && (
+                <ConfirmModal
+                    open
+                    onClose={() => setConfirmAction(null)}
+                    onConfirm={() => {
+                        if (confirmAction.type === 'archive') confirmDeleteUnit();
+                        if (confirmAction.type === 'restore') confirmRestore();
+                    }}
+                    title={confirmAction.type === 'archive' ? 'Archive Unit' : 'Restore Unit'}
+                    message={
+                        confirmAction.type === 'archive'
+                            ? `Archive unit ${confirmAction.number}? You can restore it later.`
+                            : 'Restore this unit?'
+                    }
+                    variant={confirmAction.type === 'archive' ? 'danger' : 'primary'}
+                    confirmLabel={confirmAction.type === 'archive' ? 'Archive' : 'Restore'}
+                />
             )}
         </div>
     );

@@ -36,11 +36,16 @@ export default function TenantNavbar({
                     {user.initials}
                 </div>
                 <div>
-                    <p className="text-xs leading-tight font-semibold text-[var(--rtms-navy)]">
-                        {user.name}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                        <p className="text-xs leading-tight font-semibold text-[var(--rtms-navy)]">
+                            {user.name}
+                        </p>
+                        <span className="rounded-md bg-[var(--rtms-deep-brown)]/10 px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-[var(--rtms-deep-brown)] uppercase">
+                            Tenant
+                        </span>
+                    </div>
                     <p className="text-[10px] leading-tight text-[var(--rtms-muted)]">
-                        {(user.tenant?.units ?? []).map((u) => u.number).join(', ') || '-'}
+                        {user.unit ?? '-'}
                     </p>
                 </div>
                 <Icon

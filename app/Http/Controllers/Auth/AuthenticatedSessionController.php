@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\RentalApplication;
 use App\Models\User;
 use App\Support\TenantOtpService;
 use Illuminate\Http\RedirectResponse;
@@ -59,10 +60,18 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('applicant.dashboard'));
         }
 
+        $isNewlyConverted = $user->rentalApplications()
+            ->where('status', RentalApplication::STATUS_CONVERTED)
+            ->exists();
+
         if ($user->must_change_password) {
+            $message = $isNewlyConverted
+                ? 'Congratulations! Payment successful and you are now a tenant! Please set your password to continue.'
+                : 'Please set your new password to continue.';
+
             return redirect()
                 ->route('tenant.password.create')
-                ->with('success', 'Please set your new password to continue.');
+                ->with('success', $message);
         }
 
         try {
@@ -73,9 +82,13 @@ class AuthenticatedSessionController extends Controller
                 ->with('error', $exception->getMessage());
         }
 
+        $otpMessage = $isNewlyConverted
+            ? 'Congratulations! Your payment was successful and you are now a tenant! Check your email for the OTP.'
+            : 'A 6-digit OTP was sent to your email.';
+
         return redirect()
             ->route('tenant.otp.show')
-            ->with('success', 'A 6-digit OTP was sent to your email.');
+            ->with('success', $otpMessage);
     }
 
     /** POST /logout */

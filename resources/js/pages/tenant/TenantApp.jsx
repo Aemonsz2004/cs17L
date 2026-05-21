@@ -12,7 +12,7 @@ import MyUnitPage from './MyunitPage';
 import TenantNotificationsPage from './NotificationPage';
 import PayRentPage from './PayrentPage';
 const PAGE_TITLES = {
-    'my-unit': 'My Unit',
+    'my-unit': 'Available Units',
     lease: 'Lease Agreement',
     billing: 'Billing & Payments',
     'pay-rent': 'Pay Rent',
@@ -33,9 +33,12 @@ export default function TenantApp({
     initialPage = 'my-unit',
     tenant,
     invoices,
+    leases,
     maintenance,
     notifications,
     messages,
+    isMovedOut = false,
+    availableUnits = [],
 }) {
     const [page] = useState(initialPage);
     const { auth, unread_count, archivedNotifications } = usePage().props;
@@ -68,10 +71,12 @@ export default function TenantApp({
                         tenant={tenant}
                         invoices={invoices}
                         maintenance={maintenance}
+                        isMovedOut={isMovedOut}
+                        availableUnits={availableUnits}
                     />
                 );
             case 'lease':
-                return <LeasePage tenant={tenant} invoices={invoices} />;
+                return <LeasePage tenant={tenant} invoices={invoices} leases={leases} />;
             case 'billing':
                 return (
                     <TenantBillingPage onPayRent={() => navigate('pay-rent')} />
@@ -98,11 +103,16 @@ export default function TenantApp({
             user={{
                 name: userName,
                 initials,
+                unit: tenant?.units?.length > 0
+                    ? tenant.units.map((u) => u.number).join(', ')
+                    : tenant?.unit ?? null,
+                tenant,
             }}
             messageCount={messageCount}
             pageTitle={PAGE_TITLES[page]}
             notifCount={unreadCount}
             onNotifClick={() => navigate('notifications')}
+            isMovedOut={isMovedOut}
         >
             {renderPage()}
         </TenantLayout>

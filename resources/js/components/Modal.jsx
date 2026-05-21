@@ -6,6 +6,7 @@ const sizeStyles = {
     md: 'max-w-md',
     lg: 'max-w-lg',
     xl: 'max-w-2xl',
+    '2xl': 'max-w-5xl',
 };
 export default function Modal({
     open,
@@ -35,8 +36,8 @@ export default function Modal({
     }, [open]);
     if (!open) return null;
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-[#1B2B4B]/40 p-4 backdrop-blur-[2px]"
+            <div
+                className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#1B2B4B]/40 p-4 pt-[5vh] backdrop-blur-[2px]"
             onMouseDown={(e) => {
                 if (e.target === e.currentTarget) onClose();
             }}

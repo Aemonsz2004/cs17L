@@ -1,5 +1,7 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 
+import PublicLayout from '../../components/Layouts/PublicLayout';
+
 export default function Register() {
     const { data, setData, post, processing, errors } = useForm({
         email: '',
@@ -97,3 +99,5 @@ export default function Register() {
         </>
     );
 }
+
+Register.layout = (page) => <PublicLayout children={page} />;

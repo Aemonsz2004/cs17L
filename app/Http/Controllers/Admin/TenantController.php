@@ -3,6 +3,10 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\MoveOutTenantRequest;
+use App\Http\Requests\RenewLeaseRequest;
+use App\Http\Requests\StoreTenantRequest;
+use App\Http\Requests\UpdateTenantRequest;
 use App\Models\Invoice;
 use App\Models\Lease;
 use App\Models\MoveOutHistory;
@@ -11,8 +15,8 @@ use App\Models\Tenant;
 use App\Models\Unit;
 use App\Models\UnitHistory;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -47,22 +51,18 @@ class TenantController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(StoreTenantRequest $request): RedirectResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'initials' => ['required', 'string', 'max:4'],
-            'contact' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:20'],
-            'email' => ['required', 'email', 'max:255', 'unique:tenants,email', 'unique:users,email'],
-            'unit_id' => ['required', 'integer', 'exists:units,id'],
-            'lease_start' => ['required', 'date'],
-            'lease_end' => ['required', 'date', 'after_or_equal:lease_start'],
-            'payment_method' => ['required', 'in:GCash,Cash'],
-            'status' => ['nullable', 'in:active,pending_payment'],
-        ]);
+        $data = $request->validated();
 
         $data['status'] = $data['status'] ?? 'active';
+        $leaseDuration = isset($data['lease_duration']) ? (int) $data['lease_duration'] : null;
+        $leaseStart = $data['lease_start'];
+
+        if ($leaseDuration && ! isset($data['lease_end'])) {
+            $data['lease_end'] = Carbon::parse($leaseStart)->addMonths($leaseDuration)->format('Y-m-d');
+        }
+
         $temporaryPassword = $this->generateTemporaryPassword();
 
         $credentials = DB::transaction(function () use ($data, $temporaryPassword): array {
@@ -87,7 +87,11 @@ class TenantController extends Controller
                 'deposit' => $unit->base_rent * 2,
                 'lease_start' => $data['lease_start'],
                 'lease_end' => $data['lease_end'],
-                'payment_method' => $data['payment_method'],
+                'lease_duration' => $data['lease_duration'] ?? null,
+                'occupation' => $data['occupation'] ?? null,
+                'monthly_income' => $data['monthly_income'] ?? null,
+                'emergency_contact' => $data['emergency_contact'] ?? null,
+                'payment_method' => 'GCash',
                 'status' => $data['status'],
             ]);
 
@@ -98,7 +102,7 @@ class TenantController extends Controller
                 'end_date' => $data['lease_end'],
                 'rent' => $unit->base_rent,
                 'deposit' => $unit->base_rent * 2,
-                'payment_method' => $data['payment_method'],
+                'payment_method' => 'GCash',
                 'status' => 'active',
             ]);
 
@@ -140,20 +144,9 @@ class TenantController extends Controller
             ->with('tenant_credentials', $credentials);
     }
 
-    public function update(Request $request, Tenant $tenant): RedirectResponse
+    public function update(UpdateTenantRequest $request, Tenant $tenant): RedirectResponse
     {
-        $data = $request->validate([
-            'name' => ['sometimes', 'string', 'max:255'],
-            'initials' => ['sometimes', 'string', 'max:4'],
-            'contact' => ['sometimes', 'string', 'max:255'],
-            'phone' => ['sometimes', 'string', 'max:20'],
-            'email' => ['sometimes', 'email', 'max:255', 'unique:tenants,email,'.$tenant->id],
-            'unit_id' => ['sometimes', 'integer', 'exists:units,id'],
-            'lease_start' => ['sometimes', 'date'],
-            'lease_end' => ['sometimes', 'date'],
-            'payment_method' => ['sometimes', 'in:GCash,Cash'],
-            'status' => ['sometimes', 'in:active,pending_payment,moved_out,terminated'],
-        ]);
+        $data = $request->validated();
 
         DB::transaction(function () use ($tenant, $data): void {
             $currentUnits = $tenant->units()->pluck('units.id');
@@ -178,7 +171,7 @@ class TenantController extends Controller
 
                 if ($currentLease) {
                     $currentLease->update([
-                        'status' => 'ended',
+                        'status' => Lease::STATUS_TERMINATED,
                         'ended_at' => now(),
                     ]);
 
@@ -239,7 +232,7 @@ class TenantController extends Controller
 
                 if ($leaseFieldsChanged) {
                     $currentLease->update([
-                        'status' => 'ended',
+                        'status' => Lease::STATUS_RENEWED,
                         'ended_at' => now(),
                     ]);
 
@@ -286,16 +279,9 @@ class TenantController extends Controller
         ]);
     }
 
-    public function renew(Request $request, Tenant $tenant): RedirectResponse
+    public function renew(RenewLeaseRequest $request, Tenant $tenant): RedirectResponse
     {
-        $data = $request->validate([
-            'lease_start' => ['required', 'date'],
-            'lease_end' => ['required', 'date', 'after_or_equal:lease_start'],
-            'rent' => ['required', 'integer', 'min:0'],
-            'deposit' => ['required', 'integer', 'min:0'],
-            'payment_method' => ['required', 'in:GCash,Cash'],
-            'terms' => ['nullable', 'string'],
-        ]);
+        $data = $request->validated();
 
         DB::transaction(function () use ($tenant, $data): void {
             $hasOverlap = Lease::where('tenant_id', $tenant->id)
@@ -346,7 +332,7 @@ class TenantController extends Controller
 
             foreach ($oldLeases as $oldLease) {
                 $oldLease->update([
-                    'status' => 'ended',
+                    'status' => Lease::STATUS_RENEWED,
                     'ended_at' => now(),
                 ]);
 
@@ -355,6 +341,8 @@ class TenantController extends Controller
                     ->update(['end_date' => $oldLease->end_date]);
             }
 
+            $paymentMethod = $data['payment_method'] ?? $tenant->payment_method;
+
             $newLease = Lease::create([
                 'tenant_id' => $tenant->id,
                 'unit_id' => $unit->id,
@@ -362,7 +350,7 @@ class TenantController extends Controller
                 'end_date' => $data['lease_end'],
                 'rent' => $data['rent'],
                 'deposit' => $data['deposit'],
-                'payment_method' => $data['payment_method'],
+                'payment_method' => $paymentMethod,
                 'terms' => $data['terms'] ?? null,
                 'status' => 'active',
             ]);
@@ -374,7 +362,7 @@ class TenantController extends Controller
                 'deposit' => $data['deposit'],
                 'lease_start' => $data['lease_start'],
                 'lease_end' => $data['lease_end'],
-                'payment_method' => $data['payment_method'],
+                'payment_method' => $paymentMethod,
                 'status' => 'active',
             ]);
 
@@ -394,14 +382,9 @@ class TenantController extends Controller
         return redirect()->route('admin.tenants.index')->with('success', 'Lease renewed successfully.');
     }
 
-    public function moveOut(Request $request, Tenant $tenant): RedirectResponse
+    public function moveOut(MoveOutTenantRequest $request, Tenant $tenant): RedirectResponse
     {
-        $data = $request->validate([
-            'reason' => ['required', 'string', 'max:500'],
-            'notes' => ['nullable', 'string', 'max:1000'],
-            'damages' => ['nullable', 'string', 'max:1000'],
-            'balance_due' => ['nullable', 'integer', 'min:0'],
-        ]);
+        $data = $request->validated();
 
         $data['balance_due'] = $data['balance_due'] ?? 0;
 
@@ -412,7 +395,7 @@ class TenantController extends Controller
 
             foreach ($activeLeases as $lease) {
                 $lease->update([
-                    'status' => 'ended',
+                    'status' => Lease::STATUS_TERMINATED,
                     'ended_at' => now(),
                 ]);
 
@@ -444,6 +427,22 @@ class TenantController extends Controller
             $tenant->delete();
         });
 
+        RtmsNotification::create([
+            'variant' => 'red',
+            'message' => "Tenant {$tenant->name} ({$tenant->email}) has moved out. Reason: {$data['reason']}",
+            'category' => 'move_out',
+            'tenant_id' => null,
+            'unread' => true,
+        ]);
+
+        RtmsNotification::create([
+            'variant' => 'teal',
+            'message' => 'You have been moved out. You can now browse and apply for other available units.',
+            'category' => 'move_out',
+            'tenant_id' => $tenant->id,
+            'unread' => true,
+        ]);
+
         return redirect()->route('admin.tenants.index')->with('success', 'Tenant moved out successfully. Lease ended, units freed, and history recorded.');
     }
 
@@ -456,7 +455,7 @@ class TenantController extends Controller
 
             foreach ($activeLeases as $lease) {
                 $lease->update([
-                    'status' => 'ended',
+                    'status' => Lease::STATUS_TERMINATED,
                     'ended_at' => now(),
                 ]);
 

@@ -26,7 +26,7 @@ export default function OtpChallenge({ email, expiresAt }) {
             <div className="flex min-h-screen items-center justify-center bg-[#FAF8F4] px-4">
                 <div className="w-full max-w-md rounded-2xl border border-[#1B2B4B]/10 bg-white p-6 shadow-sm">
                     <h1 className="text-2xl font-bold text-[#1B2B4B]">
-                        Enter OTP
+                        Enter OTP   
                     </h1>
                     <p className="mt-1 text-sm text-[#5C6B88]">
                         We sent a 6-digit verification code to{' '}
@@ -35,13 +35,15 @@ export default function OtpChallenge({ email, expiresAt }) {
                         </span>
                         .
                     </p>
-                    {expiryLabel && (
-                        <p className="mt-1 text-xs text-[#5C6B88]">
-                            Code expires at {expiryLabel}.
-                        </p>
-                    )}
+                    <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        ⏳ Code expires in{' '}
+                        <span className="font-semibold">10 minutes</span>
+                        {expiryLabel && (
+                            <> (at {expiryLabel})</>
+                        )}.
+                    </p>
 
-                    {flash?.success && (
+                    {/* {flash?.success && (
                         <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                             {flash.success}
                         </p>
@@ -50,7 +52,7 @@ export default function OtpChallenge({ email, expiresAt }) {
                         <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                             {flash.error}
                         </p>
-                    )}
+                    )} */}
 
                     <form className="mt-6 space-y-4" onSubmit={submit}>
                         <div>

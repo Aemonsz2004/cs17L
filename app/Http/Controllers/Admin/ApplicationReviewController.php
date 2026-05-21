@@ -3,14 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ApproveApplicationRequest;
+use App\Http\Requests\ConfirmMoveInRequest;
+use App\Http\Requests\RejectApplicationRequest;
 use App\Models\RentalApplication;
 use App\Models\Unit;
 use App\Support\ApplicationApprovalService;
 use App\Support\ApplicationWorkflowService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -21,18 +22,6 @@ class ApplicationReviewController extends Controller
         $applications = RentalApplication::with([
             'user:id,name,email',
             'unit:id,number,floor,type,area,base_rent,status,reserved_until',
-            'latestPayment' => function ($query): void {
-                $query->select([
-                    'application_payments.id',
-                    'application_payments.rental_application_id',
-                    'application_payments.provider_reference',
-                    'application_payments.payment_method',
-                    'application_payments.status',
-                    'application_payments.checkout_url',
-                    'application_payments.verified_at',
-                    'application_payments.expires_at',
-                ]);
-            },
         ])
             ->latest()
             ->get();
@@ -41,18 +30,6 @@ class ApplicationReviewController extends Controller
             ->with([
                 'user:id,name,email',
                 'unit:id,number,floor,type,area,base_rent,status,reserved_until',
-                'latestPayment' => function ($query): void {
-                    $query->select([
-                        'application_payments.id',
-                        'application_payments.rental_application_id',
-                        'application_payments.provider_reference',
-                        'application_payments.payment_method',
-                        'application_payments.status',
-                        'application_payments.checkout_url',
-                        'application_payments.verified_at',
-                        'application_payments.expires_at',
-                    ]);
-                },
             ])
             ->latest('deleted_at')
             ->get();
@@ -61,14 +38,13 @@ class ApplicationReviewController extends Controller
             'initialPage' => 'applications',
             'applications' => $applications,
             'archivedApplications' => $archivedApplications,
+            'units' => Unit::where('status', 'vacant')->orderBy('floor')->orderBy('number')->get(),
         ]);
     }
 
-    public function approve(Request $request, RentalApplication $application, ApplicationApprovalService $approvalService): RedirectResponse
+    public function approve(ApproveApplicationRequest $request, RentalApplication $application, ApplicationApprovalService $approvalService): RedirectResponse
     {
-        $data = $request->validate([
-            'unit_id' => ['required', 'exists:units,id'],
-        ]);
+        $data = $request->validated();
 
         $unit = Unit::findOrFail($data['unit_id']);
 
@@ -79,14 +55,24 @@ class ApplicationReviewController extends Controller
         }
 
         return redirect()->route('admin.applications.index')
-            ->with('success', 'Application approved. Tenant record created and deposit invoice generated.');
+            ->with('success', 'Application approved. Unit reserved.');
     }
 
-    public function reject(Request $request, RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
+    public function confirmPayment(RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
     {
-        $data = $request->validate([
-            'rejection_reason' => ['required', 'string', 'max:500'],
-        ]);
+        try {
+            $workflow->confirmPayment($application, Auth::id());
+        } catch (\RuntimeException $exception) {
+            return redirect()->route('admin.applications.index')->with('error', $exception->getMessage());
+        }
+
+        return redirect()->route('admin.applications.index')
+            ->with('success', 'Payment confirmed. Awaiting move-in confirmation.');
+    }
+
+    public function reject(RejectApplicationRequest $request, RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
+    {
+        $data = $request->validated();
 
         try {
             $workflow->reject($application, $data['rejection_reason'], Auth::id());
@@ -94,66 +80,21 @@ class ApplicationReviewController extends Controller
             return redirect()->route('admin.applications.index')->with('error', $exception->getMessage());
         }
 
-        return redirect()->route('admin.applications.index')->with('success', 'Application rejected and applicant can re-apply.');
+        return redirect()->route('admin.applications.index')->with('success', 'Application rejected.');
     }
 
-    public function sendLease(Request $request, RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
+    public function confirmMoveIn(ConfirmMoveInRequest $request, RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
     {
-        $data = $request->validate([
-            'lease_terms' => ['required', 'string', 'min:20'],
-            'lease_attachment' => ['nullable', 'file', 'mimes:pdf', 'max:10240'],
-        ]);
-
-        $leaseAttachmentPath = $application->lease_attachment_path;
-
-        if ($request->hasFile('lease_attachment')) {
-            if ($leaseAttachmentPath) {
-                Storage::disk('public')->delete($leaseAttachmentPath);
-            }
-
-            $leaseAttachmentPath = $request->file('lease_attachment')->store('applications/lease_attachments', 'public');
-        }
+        $data = $request->validated();
 
         try {
-            $workflow->sendLease($application, $data['lease_terms'], Auth::id(), $leaseAttachmentPath);
+            $workflow->confirmMoveIn($application, (int) $data['lease_duration'], $data['payment_method'] ?? null, Auth::id());
         } catch (\RuntimeException $exception) {
             return redirect()->route('admin.applications.index')->with('error', $exception->getMessage());
         }
 
-        return redirect()->route('admin.applications.index')->with('success', 'Lease terms sent to applicant for acknowledgment.');
-    }
-
-    public function confirmDeposit(RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
-    {
-        try {
-            $workflow->confirmDeposit($application, Auth::id());
-        } catch (\RuntimeException $exception) {
-            return redirect()->route('admin.applications.index')->with('error', $exception->getMessage());
-        }
-
-        return redirect()->route('admin.applications.index')->with('success', 'Admin override applied. Auto-conversion has been triggered.');
-    }
-
-    public function convertToTenant(Request $request, RentalApplication $application, ApplicationWorkflowService $workflow): RedirectResponse
-    {
-        $data = $request->validate([
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-            'payment_method' => ['nullable', 'in:GCash,Cash'],
-        ]);
-
-        $data['admin_id'] = Auth::id();
-
-        try {
-            $credentials = $workflow->convertToTenant($application, $data);
-        } catch (\RuntimeException $exception) {
-            return redirect()->route('admin.applications.index')->with('error', $exception->getMessage());
-        }
-
-        return redirect()
-            ->route('admin.applications.index')
-            ->with('success', 'Manual conversion override completed.')
-            ->with('tenant_credentials', $credentials);
+        return redirect()->route('admin.applications.index')
+            ->with('success', 'Move-in confirmed. Tenant created and unit occupied.');
     }
 
     public function destroy(RentalApplication $application): RedirectResponse

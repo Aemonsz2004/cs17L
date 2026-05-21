@@ -164,6 +164,10 @@ export default function ReportsPage() {
                                         {invoice.period}
                                     </p>
                                     <p className="text-xs text-[#5C6B88]">
+                                        {invoice.tenant?.name ?? 'Unknown'} · Unit{' '}
+                                        {(invoice.tenant?.units ?? []).map((u) => u.number).join(', ') || '-'}
+                                    </p>
+                                    <p className="text-xs text-[#5C6B88]">
                                         Due{' '}
                                         {formatDateDisplay(invoice.due_date)}
                                         {invoice.paid_date
